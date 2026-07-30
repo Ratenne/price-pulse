@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1"
+    />
+    <title>PricePulse - PC 상품 가격 흐름</title>
+    <script>
+      (() => {
+        try {
+          const saved = localStorage.getItem("pricepulse-theme");
+          const systemDark = window.matchMedia(
+            "(prefers-color-scheme: dark)"
+          ).matches;
+          const resolved =
+            saved === "dark" || (saved !== "light" && systemDark)
+              ? "dark"
+              : "light";
+
+          document.documentElement.dataset.theme = resolved;
+          document.documentElement.style.colorScheme = resolved;
+        } catch {
+          document.documentElement.dataset.theme = "light";
+          document.documentElement.style.colorScheme = "light";
+        }
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
