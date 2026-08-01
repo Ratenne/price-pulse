@@ -1,22 +1,31 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AppProvider, useAppContext } from "./contexts/AppContext";
-import Dashboard from "./pages/Dashboard";
-import RankingsPage from "./pages/RankingsPage";
-import CategoriesPage from "./pages/CategoriesPage";
-import SafeTradePage from "./pages/SafeTradePage";
-import ProductDetailPage from "./pages/ProductDetailPage";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const RankingsPage = lazy(() => import("./pages/RankingsPage"));
+const CategoriesPage = lazy(() => import("./pages/CategoriesPage"));
+const SafeTradePage = lazy(() => import("./pages/SafeTradePage"));
+const ProductDetailPage = lazy(() => import("./pages/ProductDetailPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const IntroVideo = lazy(() =>
   import("./components/intro/IntroVideo").then(module => ({
     default: module.IntroVideo,
   }))
 );
+
+function PageLoading() {
+  return (
+    <main className="grid min-h-[60vh] place-items-center" aria-live="polite">
+      <p className="text-sm text-[var(--text-secondary)]">화면을 불러오는 중입니다.</p>
+    </main>
+  );
+}
 
 function AppContent() {
   const { isLoading, setLoadingComplete } = useAppContext();
@@ -28,20 +37,22 @@ function AppContent() {
         aria-hidden={isLoading}
         inert={isLoading ? true : undefined}
       >
-        <Switch>
-          <Route path={"/"}>
-            <Dashboard ambientEnabled={!isLoading} />
-          </Route>
-          <Route path={"/rankings"} component={RankingsPage} />
-          <Route path={"/categories"} component={CategoriesPage} />
-          <Route path={"/safe-trade"} component={SafeTradePage} />
-          <Route path="/products/:id">
-            {params => <ProductDetailPage id={params.id} />}
-          </Route>
-          <Route path={"/404"} component={NotFound} />
-          {/* Final fallback route */}
-          <Route component={NotFound} />
-        </Switch>
+        <Suspense fallback={<PageLoading />}>
+          <Switch>
+            <Route path={"/"}>
+              <Dashboard ambientEnabled={!isLoading} />
+            </Route>
+            <Route path={"/rankings"} component={RankingsPage} />
+            <Route path={"/categories"} component={CategoriesPage} />
+            <Route path={"/safe-trade"} component={SafeTradePage} />
+            <Route path="/products/:id">
+              {params => <ProductDetailPage id={params.id} />}
+            </Route>
+            <Route path={"/404"} component={NotFound} />
+            {/* Final fallback route */}
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
       </div>
       {isLoading && (
         <Suspense
