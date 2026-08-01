@@ -5,6 +5,11 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
   "cleanUrls": true,
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
