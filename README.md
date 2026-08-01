@@ -1,5 +1,6 @@
 # PricePulse
-![Uploading ChatGPT_Image_Jul_25__2026__07_03_27_AM_복사본-removebg-preview.png…]()
+<img width="866" height="288" alt="ChatGPT_Image_Jul_25__2026__07_03_27_AM_복사본-removebg-preview" src="https://github.com/user-attachments/assets/c66ec0ce-80e0-4309-86b8-489af7f18bf6" />
+
 
 
 PricePulse는 GPU, CPU, 노트북의 가격 흐름을 비교해 구매자와 판매자가 현재 가격 수준과 적정 거래 구간을 판단하도록 돕는 프런트엔드 데모입니다.
