@@ -189,9 +189,25 @@ pnpm run start
 
 # Vite 프리뷰
 pnpm run preview
+
+# 단위 테스트
+pnpm run test
 ```
 
-현재 `package.json`에는 별도의 lint 또는 test 스크립트가 정의되어 있지 않습니다.
+CI에서는 타입 검사, 단위 테스트, 프로덕션 빌드를 순서대로 실행합니다.
+
+## 배포
+
+PricePulse는 Vercel 정적 배포를 기본 경로로 사용합니다.
+
+- 빌드 명령: `pnpm run build`
+- 정적 출력: `dist/public`
+- CI: `.github/workflows/ci.yml`
+- Production: `.github/workflows/deploy-production.yml`
+- 운영 절차: `docs/deployment.md`
+- Rollback: `docs/rollback.md`
+
+Production 배포는 GitHub `production` Environment의 수동 승인 후 실행합니다.
 
 ## 가격 계산 기준
 
