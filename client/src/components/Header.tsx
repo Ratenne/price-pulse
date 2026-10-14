@@ -1,6 +1,8 @@
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Search } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Link, useLocation } from "wouter";
+import { useState } from "react";
+import { BrandLogo } from "./BrandLogo";
 
 const NAV_ITEMS = [
   { href: "/", label: "홈" },
@@ -12,60 +14,68 @@ const NAV_ITEMS = [
 export function Header() {
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
-  const isActive = (path: string) =>
-    path === "/" ? location === "/" : location.startsWith(path);
-
+  const [query, setQuery] = useState("");
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur">
-      <div className="container flex h-16 items-center justify-between gap-4">
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-80"
-          aria-label="PricePulse 홈"
-        >
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--orange)] text-sm font-bold text-white">
-            ₩
-          </span>
-          <span className="hidden text-lg font-bold text-[var(--text-primary)] sm:inline">
-            PricePulse
-          </span>
-        </Link>
-
-        <nav
-          className="flex min-w-0 flex-1 items-center justify-center gap-1 overflow-x-auto sm:gap-3 md:gap-7"
-          aria-label="주요 메뉴"
-        >
-          {NAV_ITEMS.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive(item.href) ? "page" : undefined}
-              className={`shrink-0 rounded-md px-2 py-2 text-xs font-semibold transition-colors sm:text-sm ${
-                isActive(item.href)
-                  ? "text-[var(--orange-strong)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <button
-          type="button"
-          onClick={toggleTheme}
-          className="shrink-0 rounded-lg bg-[var(--surface-muted)] p-2 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sky-blue)]"
-          aria-label={
-            theme === "light" ? "어두운 테마로 변경" : "밝은 테마로 변경"
-          }
-        >
-          {theme === "light" ? (
-            <Moon className="h-5 w-5" />
-          ) : (
-            <Sun className="h-5 w-5" />
-          )}
-        </button>
-      </div>
-    </header>
+    <>
+      <a className="skip-link" href="#main-content">
+        본문으로 바로가기
+      </a>
+      <header className="site-header">
+        <div className="container header-inner">
+          <Link href="/" className="brand-link" aria-label="PricePulse 홈">
+            <BrandLogo variant="symbol" className="sm:hidden" />
+            <BrandLogo className="hidden sm:block" />
+          </Link>
+          <nav className="main-nav" aria-label="주요 메뉴">
+            {NAV_ITEMS.map(item => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={
+                  (
+                    item.href === "/"
+                      ? location === "/"
+                      : location.startsWith(item.href)
+                  )
+                    ? "page"
+                    : undefined
+                }
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <form
+            className="header-search"
+            role="search"
+            action="/rankings"
+            method="get"
+          >
+            <Search size={17} aria-hidden="true" />
+            <input
+              name="q"
+              aria-label="상품 검색"
+              placeholder="어떤 상품을 찾으세요?"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+            />
+          </form>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="icon-button"
+            aria-label={
+              theme === "light" ? "어두운 테마로 변경" : "밝은 테마로 변경"
+            }
+          >
+            {theme === "light" ? (
+              <Moon size={19} aria-hidden="true" />
+            ) : (
+              <Sun size={19} aria-hidden="true" />
+            )}
+          </button>
+        </div>
+      </header>
+    </>
   );
 }

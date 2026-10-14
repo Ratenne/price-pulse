@@ -1,10 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { lazy, Suspense } from "react";
-import { Route, Switch } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AppProvider, useAppContext } from "./contexts/AppContext";
+import { BrandLogo } from "./components/BrandLogo";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const RankingsPage = lazy(() => import("./pages/RankingsPage"));
@@ -22,13 +23,27 @@ const IntroVideo = lazy(() =>
 function PageLoading() {
   return (
     <main className="grid min-h-[60vh] place-items-center" aria-live="polite">
-      <p className="text-sm text-[var(--text-secondary)]">화면을 불러오는 중입니다.</p>
+      <p className="text-sm text-[var(--text-secondary)]">
+        화면을 불러오는 중입니다.
+      </p>
     </main>
   );
 }
 
 function AppContent() {
-  const { isLoading, setLoadingComplete } = useAppContext();
+  const {
+    isLoading,
+    setLoadingComplete,
+    productsLoading,
+    productsError,
+    products,
+    retryProducts,
+  } = useAppContext();
+  const [location] = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [location]);
 
   return (
     <>
@@ -38,20 +53,35 @@ function AppContent() {
         inert={isLoading ? true : undefined}
       >
         <Suspense fallback={<PageLoading />}>
-          <Switch>
-            <Route path={"/"}>
-              <Dashboard ambientEnabled={!isLoading} />
-            </Route>
-            <Route path={"/rankings"} component={RankingsPage} />
-            <Route path={"/categories"} component={CategoriesPage} />
-            <Route path={"/safe-trade"} component={SafeTradePage} />
-            <Route path="/products/:id">
-              {params => <ProductDetailPage id={params.id} />}
-            </Route>
-            <Route path={"/404"} component={NotFound} />
-            {/* Final fallback route */}
-            <Route component={NotFound} />
-          </Switch>
+          {productsLoading ? (
+            <PageLoading />
+          ) : productsError ? (
+            <main className="container py-24" role="alert">
+              <p>{productsError}</p>
+              <button className="button-primary mt-5" onClick={retryProducts}>
+                다시 불러오기
+              </button>
+            </main>
+          ) : products.length === 0 ? (
+            <main className="container py-24">
+              <p>아직 조회 가능한 상품 가격 이력이 없습니다.</p>
+            </main>
+          ) : (
+            <Switch>
+              <Route path={"/"}>
+                <Dashboard ambientEnabled={!isLoading} />
+              </Route>
+              <Route path={"/rankings"} component={RankingsPage} />
+              <Route path={"/categories"} component={CategoriesPage} />
+              <Route path={"/safe-trade"} component={SafeTradePage} />
+              <Route path="/products/:id">
+                {params => <ProductDetailPage id={params.id} />}
+              </Route>
+              <Route path={"/404"} component={NotFound} />
+              {/* Final fallback route */}
+              <Route component={NotFound} />
+            </Switch>
+          )}
         </Suspense>
       </div>
       {isLoading && (
@@ -62,8 +92,7 @@ function AppContent() {
               aria-label="PricePulse 시작 화면 준비 중"
             >
               <div className="intro-video__fallback-brand">
-                <span className="intro-video__fallback-symbol">₩</span>
-                <span>PricePulse</span>
+                <BrandLogo tone="dark" className="brand-logo--intro" />
               </div>
             </div>
           }

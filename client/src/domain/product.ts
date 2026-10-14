@@ -40,6 +40,8 @@ export interface Product extends PriceSummary, FairPriceRange {
   priceStatus: PriceStatus;
   priceHistory: PriceHistoryPoint[];
   updatedAt: string;
+  sourceUrl?: string;
+  latestHistoryMonth?: string;
 }
 
 export interface ProductSeed {

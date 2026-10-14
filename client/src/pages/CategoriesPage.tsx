@@ -1,5 +1,7 @@
 import { Header } from "@/components/Header";
 import { ProductCard } from "@/components/ProductCard";
+import { ProductList } from "@/components/ProductList";
+import { PageHeading } from "@/components/PageHeading";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
   isProductCategory,
@@ -13,70 +15,54 @@ import {
   sortProducts,
 } from "@/services/productService";
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
+import { ArrowRight } from "lucide-react";
+import { useAppContext } from "@/contexts/AppContext";
 
 function getInitialCategory(): ProductCategory {
   const value = new URLSearchParams(window.location.search).get("category");
   return isProductCategory(value) ? value : "GPU";
 }
-
 export default function CategoriesPage() {
+  const { products: catalog } = useAppContext();
   const [category, setCategory] = useState<ProductCategory>(getInitialCategory);
   const definition = PRODUCT_CATEGORIES[category];
   const products = useMemo(
-    () => sortProducts(getProductsByCategory(category), "range"),
-    [category]
+    () => sortProducts(getProductsByCategory(category, catalog), "range"),
+    [category, catalog]
   );
-  const summary = getCategorySummary(category);
-  const nearLowest = products.filter(
-    product => product.currentPrice <= product.sixMonthLowPrice * 1.1
+  const summary = getCategorySummary(category, catalog);
+  const nearLowest = sortProducts(
+    products.filter(
+      product => product.currentPrice <= product.sixMonthLowPrice * 1.1
+    ),
+    "near-low"
   );
-
-  const selectCategory = (nextCategory: ProductCategory) => {
-    setCategory(nextCategory);
+  const selectCategory = (next: ProductCategory) => {
+    setCategory(next);
     window.history.replaceState(
       null,
       "",
-      `${window.location.pathname}?category=${nextCategory}`
+      `${window.location.pathname}?category=${next}`
     );
   };
-
   return (
     <div className="app-shell">
       <Header />
-      <main>
-        <section className="border-b border-[var(--border)] bg-[var(--surface-muted)] py-12">
-          <div className="container grid items-center gap-8 md:grid-cols-[1fr_280px]">
-            <div>
-              <p className="text-sm font-semibold text-[var(--orange-strong)]">
-                카테고리 가격 가이드
-              </p>
-              <h1 className="mt-2 text-3xl font-bold text-[var(--text-primary)] md:text-4xl">
-                {definition.label}
-              </h1>
-              <p className="mt-4 max-w-2xl leading-relaxed text-[var(--text-secondary)]">
-                {definition.detail}
-              </p>
-            </div>
-            <img
-              src={definition.imageUrl}
-              alt={`${definition.label} 카테고리 대표 이미지`}
-              className="h-44 w-full rounded-2xl bg-[#111923] object-contain p-3"
-            />
-          </div>
-        </section>
-
-        <div className="sticky top-[65px] z-30 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur">
-          <div
-            className="container flex gap-2 overflow-x-auto py-3"
-            role="tablist"
-            aria-label="상품 카테고리 선택"
-          >
+      <main id="main-content">
+        <PageHeading
+          title={`${definition.label} 가격 탐색`}
+          description={definition.detail}
+        >
+          <img src={definition.imageUrl} alt="" width="150" height="105" />
+        </PageHeading>
+        <nav className="category-nav" aria-label="상품 카테고리 선택">
+          <div className="container chip-group">
             {VISIBLE_PRODUCT_CATEGORIES.map(item => (
               <button
                 key={item}
                 type="button"
-                role="tab"
-                aria-selected={category === item}
+                aria-pressed={category === item}
                 className="filter-chip"
                 onClick={() => selectCategory(item)}
               >
@@ -84,91 +70,89 @@ export default function CategoriesPage() {
               </button>
             ))}
           </div>
-        </div>
-
-        <section className="container py-10">
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">
-            가격 흐름 요약
-          </h2>
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            <div className="summary-card">
-              <span className="text-sm text-[var(--text-muted)]">
-                예시 상품
-              </span>
-              <strong className="mt-2 block text-2xl text-[var(--text-primary)]">
-                {summary.productCount}개
-              </strong>
-            </div>
-            <div className="summary-card">
-              <span className="text-sm text-[var(--text-muted)]">
-                평균 가격 변동폭
-              </span>
-              <strong className="mt-2 block text-2xl text-[var(--text-primary)]">
-                {summary.averageRangeRate.toFixed(1)}%
-              </strong>
-            </div>
-            <div className="summary-card">
-              <span className="text-sm text-[var(--text-muted)]">
-                최저가 근접
-              </span>
-              <strong className="mt-2 block text-2xl text-[var(--sky-blue-strong)]">
-                {summary.nearLowestCount}개
-              </strong>
-            </div>
+        </nav>
+        <section
+          className="container category-overview"
+          aria-label={`${definition.label} 가격 흐름 요약`}
+        >
+          <div>
+            <h2>카테고리 한눈에 보기</h2>
+            <p>6개월 가격 기록을 기준으로 비교합니다.</p>
           </div>
+          <dl>
+            <dt>비교 상품</dt>
+            <dd>
+              {summary.productCount}
+              <span className="text-sm font-normal"> 개</span>
+            </dd>
+          </dl>
+          <dl>
+            <dt>평균 가격 변동폭</dt>
+            <dd>
+              {summary.averageRangeRate.toFixed(1)}
+              <span className="text-sm font-normal"> %</span>
+            </dd>
+          </dl>
+          <dl>
+            <dt>최저가 근접 상품</dt>
+            <dd>
+              {summary.nearLowestCount}
+              <span className="text-sm font-normal"> 개</span>
+            </dd>
+          </dl>
         </section>
-
-        <section className="bg-[var(--surface-muted)] py-12">
+        <section className="container discovery-section">
+          <div className="section-heading">
+            <div>
+              <h2>{definition.label} 변동폭 순위</h2>
+              <p>가격 차이가 컸던 상품부터 확인하세요.</p>
+            </div>
+            <Link className="text-link" href={`/rankings?category=${category}`}>
+              순위 더 보기 <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          </div>
+          <ProductList products={products.slice(0, 5)} />
+        </section>
+        <section className="discovery-section low-price-section">
           <div className="container">
-            <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-              {definition.label} 가격 변동폭 순위
-            </h2>
-            <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {products.slice(0, 3).map((product, index) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  rank={index + 1}
-                  showRangeAmount
-                />
-              ))}
+            <div className="section-heading">
+              <div>
+                <h2>최저가에 가까운 {definition.label}</h2>
+                <p>6개월 최저 가격 대비 10% 이내의 상품입니다.</p>
+              </div>
+            </div>
+            <div className="product-grid">
+              {nearLowest.length ? (
+                nearLowest
+                  .slice(0, 3)
+                  .map(product => (
+                    <ProductCard key={product.id} product={product} />
+                  ))
+              ) : (
+                <p className="text-[var(--text-secondary)]">
+                  현재 조건에 해당하는 상품이 없습니다.
+                </p>
+              )}
             </div>
           </div>
         </section>
-
-        <section className="container py-12">
-          <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-            최근 최저가에 가까운 {definition.label}
-          </h2>
-          <p className="mt-2 text-[var(--text-secondary)]">
-            최근 최저 가격과 현재 가격의 거리를 함께 확인합니다.
-          </p>
-          <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {nearLowest.length > 0 ? (
-              nearLowest
-                .slice(0, 3)
-                .map(product => (
-                  <ProductCard key={product.id} product={product} />
-                ))
-            ) : (
-              <p className="text-sm text-[var(--text-muted)]">
-                현재 조건에 해당하는 예시 상품이 없습니다.
-              </p>
+        <section className="container discovery-section">
+          <div className="section-heading">
+            <h2>전체 {definition.label}</h2>
+            <span>{products.length}개 상품</span>
+          </div>
+          <div className="product-grid">
+            {products.length === 0 && (
+              <p>이 카테고리에는 아직 수집된 상품이 없습니다.</p>
             )}
+            {products.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
           </div>
-        </section>
-
-        <section className="border-t border-[var(--border)] bg-[var(--background)] py-12">
-          <div className="container">
-            <h2 className="text-2xl font-bold text-[var(--text-primary)]">
-              전체 {definition.label}
-            </h2>
-            <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {products.map(product => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
-          </div>
+          <p className="data-notice">
+            다나와 월별 최저가 기준이며, 수집되지 않은 월은 표시하지 않습니다.
+            적정 범위는 참고용 계산입니다.
+          </p>
         </section>
       </main>
       <SiteFooter />

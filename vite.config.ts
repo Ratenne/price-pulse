@@ -224,6 +224,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    proxy: { "/api": "http://127.0.0.1:3001" },
     port: 3000,
     strictPort: false, // Will find next available port if 3000 is busy
     host: true,

@@ -5,8 +5,8 @@
 
 PricePulse는 GPU, CPU, 노트북의 가격 흐름을 비교해 구매자와 판매자가 현재 가격 수준과 적정 거래 구간을 판단하도록 돕는 프런트엔드 데모입니다.
 
-화면은 서비스 시연용 목업 데이터를 사용합니다. 별도의 서버 측 CLI가 다나와의 실제
-상품 목록과 월별 가격 이력을 수집해 Supabase PostgreSQL에 초기 데이터셋을 구축합니다.
+화면은 `/api/products`가 Supabase PostgreSQL에서 조회한 다나와 상품과 월별 가격
+이력을 사용합니다. 별도의 서버 측 CLI가 다나와 상품 목록과 가격 이력을 수집합니다.
 
 ## 주요 기능
 
@@ -172,6 +172,28 @@ Node.js와 pnpm이 필요합니다.
 pnpm install --frozen-lockfile
 pnpm run dev
 ```
+
+실제 DB 상품을 조회하려면 `.env.example`을 참고해 `.env.local`을 설정하고 별도
+터미널에서 `pnpm run dev:api`를 실행합니다. Vite의 `/api` 요청은 로컬 API 서버
+`http://127.0.0.1:3001`로 전달됩니다. DB 연결 실패 시 화면은 오류와 재시도를
+제공하며 목업 가격으로 대체하지 않습니다.
+
+## 상품 조회 API
+
+`GET /api/products`는 다나와 원본 URL과 유효 월별 이력을 가진 상품을 반환합니다.
+Vercel에서는 `api/products.ts` 서버 함수, Express에서는 같은 handler를 사용합니다.
+DB 비밀번호는 서버의 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` 환경변수로만 전달하며
+`VITE_` 환경변수에 넣지 않습니다. Vercel Production에도 해당 변수를 설정해야 합니다.
+
+각 상품의 최신 저장 월을 포함한 6개월 구간으로 최저·최고·평균과 기존 가격 범위를
+계산합니다. 없는 월은 생성하지 않습니다. `priceHistory.date`는 실제 관측 일자가 아닌
+`YYYY-MM`이며 `latestHistoryMonth`와 `updatedAt`으로 데이터 시점을 표시합니다.
+`currentPrice`는 수집 시점의 상품목록 최저가이며, 없으면 마지막 월별 가격을 사용합니다.
+적정 범위는 기존 참고용 계산 규칙이며 실시간 가격·예측을 제공하지 않습니다.
+
+상품목록 탐색 없이 수동으로 등록한 테스트 매핑은 원본 URL이 없으므로 공개 목록에서
+제외합니다. CPU·노트북은 해당 카테고리의 DB 상품이 없으면 빈 목록으로 표시됩니다.
+응답은 CDN에서 60초 캐시하며 DB 장애 시 `503 CATALOG_UNAVAILABLE`을 반환합니다.
 
 Vite 개발 서버가 출력한 로컬 주소로 접속합니다.
 

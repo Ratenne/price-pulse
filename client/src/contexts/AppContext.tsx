@@ -3,13 +3,22 @@
  * Manages global app state with session storage for intro screen
  */
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
 import type { Product } from "@/domain/product";
-import { getProducts } from "@/services/productService";
+import { fetchProducts } from "@/services/productService";
 
 interface AppContextType {
   isLoading: boolean;
   products: Product[];
+  productsLoading: boolean;
+  productsError: string | null;
+  retryProducts: () => void;
   setLoadingComplete: () => void;
 }
 
@@ -34,7 +43,27 @@ function shouldShowIntro(): boolean {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoadingState] = useState(() => shouldShowIntro());
-  const [products] = useState<Product[]>(getProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setProductsLoading(true);
+    setProductsError(null);
+    fetchProducts(controller.signal)
+      .then(setProducts)
+      .catch(error => {
+        if (!controller.signal.aborted)
+          setProductsError(
+            error instanceof Error ? error.message : "상품 조회 실패"
+          );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setProductsLoading(false);
+      });
+    return () => controller.abort();
+  }, [attempt]);
 
   const setLoadingComplete = () => {
     try {
@@ -50,6 +79,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         isLoading,
         products,
+        productsLoading,
+        productsError,
+        retryProducts: () => setAttempt(value => value + 1),
         setLoadingComplete,
       }}
     >
