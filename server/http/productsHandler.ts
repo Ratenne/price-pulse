@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { getDatabasePool } from "../config/database";
-import { readProductCatalog } from "../services/productCatalog";
+import { getDatabasePool } from "../config/database.js";
+import { readProductCatalog } from "../services/productCatalog.js";
 
 export function createProductsHandler(
   read = () => readProductCatalog(getDatabasePool())
