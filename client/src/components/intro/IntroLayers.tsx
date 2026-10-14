@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { BrandLogo } from "../BrandLogo";
 
 export type IntroPhase = "opening" | "analyzing" | "decision" | "exiting";
 
@@ -58,8 +59,7 @@ export function FallbackLayer({ visible }: { visible: boolean }) {
       aria-hidden="true"
     >
       <div className="intro-video__fallback-brand">
-        <span className="intro-video__fallback-symbol">₩</span>
-        <span>PricePulse</span>
+        <BrandLogo tone="dark" className="brand-logo--intro" />
       </div>
       <svg
         className="intro-video__fallback-graph"

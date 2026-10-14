@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
-import { ProductCard } from "@/components/ProductCard";
+import { ProductList } from "@/components/ProductList";
+import { PageHeading } from "@/components/PageHeading";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
   getCategoryLabel,
@@ -14,7 +15,7 @@ import {
   getPageNumbers,
   getPaginatedItems,
 } from "@/lib/pagination";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, SearchX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 const ITEMS_PER_PAGE = 10;
@@ -52,14 +53,25 @@ export default function RankingsPage() {
   );
   const [sort, setSort] = useState<ProductSort>(initial.sort);
   const [currentPage, setCurrentPage] = useState(initial.page);
+  const [query, setQuery] = useState(
+    () => new URLSearchParams(window.location.search).get("q") || ""
+  );
 
   const sortedProducts = useMemo(() => {
     const filtered =
       category === "ALL"
         ? products
         : products.filter(product => product.category === category);
-    return sortProducts(filtered, sort);
-  }, [category, products, sort]);
+    const normalized = query.trim().toLocaleLowerCase();
+    return sortProducts(
+      filtered.filter(product =>
+        `${product.manufacturer} ${product.modelName} ${product.displayName} ${product.tags.join(" ")}`
+          .toLocaleLowerCase()
+          .includes(normalized)
+      ),
+      sort
+    );
+  }, [category, products, query, sort]);
 
   const pagination = calculatePagination(
     sortedProducts.length,
@@ -86,6 +98,7 @@ export default function RankingsPage() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (category !== "ALL") params.set("category", category);
+    if (query.trim()) params.set("q", query.trim());
     params.set("sort", sort);
     params.set("page", String(pagination.currentPage));
     window.history.replaceState(
@@ -93,7 +106,7 @@ export default function RankingsPage() {
       "",
       `${window.location.pathname}?${params.toString()}`
     );
-  }, [category, pagination.currentPage, sort]);
+  }, [category, pagination.currentPage, query, sort]);
 
   const updateCategory = (nextCategory: ProductCategory | "ALL") => {
     setCategory(nextCategory);
@@ -108,28 +121,16 @@ export default function RankingsPage() {
   return (
     <div className="app-shell">
       <Header />
-      <main>
-        <section className="border-b border-[var(--border)] bg-[var(--surface-muted)] py-12">
-          <div className="container">
-            <p className="text-sm font-semibold text-[var(--orange-strong)]">
-              PC 상품 가격 비교
-            </p>
-            <h1 className="mt-2 text-3xl font-bold text-[var(--text-primary)] md:text-4xl">
-              전체 순위
-            </h1>
-            <p className="mt-3 text-[var(--text-secondary)]">
-              가격 변동폭과 현재 가격 위치를 원하는 기준으로 비교하세요.
-            </p>
-          </div>
-        </section>
-
-        <section className="container py-10" id="rankings-section">
-          <div className="mb-8 flex flex-col gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:flex-row md:items-end md:justify-between">
+      <main id="main-content">
+        <PageHeading
+          title="전체 가격 순위"
+          description="변동폭부터 최저가까지. 원하는 기준으로 상품을 비교하세요."
+        />
+        <section className="container discovery-section" id="rankings-section">
+          <div className="ranking-controls">
             <fieldset>
-              <legend className="mb-2 text-xs font-semibold text-[var(--text-muted)]">
-                카테고리
-              </legend>
-              <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
+              <legend>카테고리</legend>
+              <div className="chip-group">
                 <button
                   type="button"
                   className="filter-chip"
@@ -151,44 +152,68 @@ export default function RankingsPage() {
                 ))}
               </div>
             </fieldset>
-            <label className="text-xs font-semibold text-[var(--text-muted)]">
-              정렬
-              <select
-                value={sort}
-                onChange={event =>
-                  updateSort(event.target.value as ProductSort)
-                }
-                className="mt-2 block w-full min-w-48 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] md:w-auto"
-              >
-                {SORT_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="filter-tools">
+              <label className="search-field">
+                <Search size={17} aria-hidden="true" />
+                <span className="sr-only">상품명 또는 제조사 검색</span>
+                <input
+                  type="search"
+                  placeholder="상품명 또는 제조사 검색"
+                  value={query}
+                  onChange={event => {
+                    setQuery(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </label>
+              <label className="sort-label">
+                정렬
+                <select
+                  value={sort}
+                  onChange={event =>
+                    updateSort(event.target.value as ProductSort)
+                  }
+                  className="mt-2 block rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                >
+                  {SORT_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
-
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="font-semibold text-[var(--text-primary)]">
+          <div className="results-heading">
+            <h2>
               {category === "ALL" ? "전체 상품" : getCategoryLabel(category)}
             </h2>
-            <span className="text-sm text-[var(--text-muted)]">
-              총 {sortedProducts.length}개
+            <span role="status" aria-live="polite">
+              총 {sortedProducts.length}개 상품
             </span>
           </div>
-
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {pageProducts.map((product, index) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                rank={(pagination.currentPage - 1) * ITEMS_PER_PAGE + index + 1}
-                showRangeAmount
-              />
-            ))}
-          </div>
-
+          {pageProducts.length ? (
+            <ProductList
+              products={pageProducts}
+              offset={(pagination.currentPage - 1) * ITEMS_PER_PAGE}
+            />
+          ) : (
+            <div className="empty-state">
+              <SearchX size={32} aria-hidden="true" />
+              <h2>검색 결과가 없습니다</h2>
+              <p>다른 상품명이나 제조사로 검색해 보세요.</p>
+              <button
+                className="button-secondary"
+                onClick={() => {
+                  setQuery("");
+                  setCategory("ALL");
+                  setCurrentPage(1);
+                }}
+              >
+                검색 조건 초기화
+              </button>
+            </div>
+          )}
           <nav
             className="mt-10 flex flex-wrap items-center justify-center gap-2"
             aria-label="전체 순위 페이지"

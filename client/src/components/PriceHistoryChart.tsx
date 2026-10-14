@@ -14,9 +14,11 @@ import {
 export function PriceHistoryChart({
   product,
   height = 240,
+  showHeading = true,
 }: {
   product: Product;
   height?: number;
+  showHeading?: boolean;
 }) {
   const data = product.priceHistory.map(point => ({
     date: new Date(point.date).toLocaleDateString("ko-KR", {
@@ -29,14 +31,19 @@ export function PriceHistoryChart({
 
   return (
     <div>
-      <div className="mb-3">
-        <h3 className="font-semibold text-[var(--text-primary)]">가격 흐름</h3>
-        <p className="text-sm text-[var(--text-secondary)]">
-          기간별 가격 변화를 확인하세요.
-        </p>
-      </div>
+      {showHeading && (
+        <div className="chart-heading mb-5">
+          <h2 className="text-xl font-bold text-[var(--text-primary)]">
+            6개월 가격 흐름
+          </h2>
+          <p className="text-sm text-[var(--text-secondary)]">
+            기간별 가격 변화를 확인하세요.
+          </p>
+        </div>
+      )}
       <div
         style={{ height }}
+        role="img"
         aria-label={`${product.displayName} 가격 흐름 차트. 현재 가격 ${formatPrice(product.currentPrice)}`}
       >
         <ResponsiveContainer width="100%" height="100%">
@@ -51,13 +58,13 @@ export function PriceHistoryChart({
             />
             <XAxis
               dataKey="date"
-              tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 12 }}
               axisLine={false}
               tickLine={false}
               minTickGap={28}
             />
             <YAxis
-              tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 12 }}
               axisLine={false}
               tickLine={false}
               width={58}
@@ -76,7 +83,7 @@ export function PriceHistoryChart({
             <Line
               type="monotone"
               dataKey="price"
-              stroke="var(--sky-blue)"
+              stroke="var(--sky-blue-strong)"
               strokeWidth={2.5}
               dot={false}
               isAnimationActive={false}

@@ -1,13 +1,24 @@
+import { BrandLogo } from "./BrandLogo";
+import { Link } from "wouter";
 export function SiteFooter() {
   return (
-    <footer className="border-t border-[var(--border)] bg-[var(--surface-muted)] py-8">
-      <div className="container text-center text-sm text-[var(--text-muted)]">
-        <p>
-          © 2026 PricePulse. PC 상품의 가격 흐름을 이해하기 쉽게 정리합니다.
-        </p>
-        <p className="mt-2 text-xs">
-          현재 화면의 가격 데이터는 서비스 시연을 위한 예시입니다.
-        </p>
+    <footer className="site-footer">
+      <div className="container">
+        <div className="footer-top">
+          <div>
+            <BrandLogo />
+            <p>가격의 흐름을 읽는 더 나은 방법.</p>
+          </div>
+          <nav aria-label="하단 메뉴">
+            <Link href="/rankings">전체 순위</Link>
+            <Link href="/categories">카테고리</Link>
+            <Link href="/safe-trade">안심거래</Link>
+          </nav>
+        </div>
+        <div className="footer-bottom">
+          <span>© 2026 PricePulse</span>
+          <p>가격 데이터와 적정 범위는 서비스 시연용 예시입니다.</p>
+        </div>
       </div>
     </footer>
   );

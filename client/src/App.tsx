@@ -1,10 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { lazy, Suspense } from "react";
-import { Route, Switch } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AppProvider, useAppContext } from "./contexts/AppContext";
+import { BrandLogo } from "./components/BrandLogo";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const RankingsPage = lazy(() => import("./pages/RankingsPage"));
@@ -22,13 +23,20 @@ const IntroVideo = lazy(() =>
 function PageLoading() {
   return (
     <main className="grid min-h-[60vh] place-items-center" aria-live="polite">
-      <p className="text-sm text-[var(--text-secondary)]">화면을 불러오는 중입니다.</p>
+      <p className="text-sm text-[var(--text-secondary)]">
+        화면을 불러오는 중입니다.
+      </p>
     </main>
   );
 }
 
 function AppContent() {
   const { isLoading, setLoadingComplete } = useAppContext();
+  const [location] = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [location]);
 
   return (
     <>
@@ -62,8 +70,7 @@ function AppContent() {
               aria-label="PricePulse 시작 화면 준비 중"
             >
               <div className="intro-video__fallback-brand">
-                <span className="intro-video__fallback-symbol">₩</span>
-                <span>PricePulse</span>
+                <BrandLogo tone="dark" className="brand-logo--intro" />
               </div>
             </div>
           }

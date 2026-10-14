@@ -1,7 +1,45 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./styles/pulse.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@layer components {
+  .brand-logo {
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .brand-logo--wordmark {
+    width: 184px;
+    height: 45px;
+  }
+
+  .brand-logo--symbol {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brand-logo--intro {
+    width: min(280px, 76vw);
+    height: auto;
+    aspect-ratio: 1770 / 445;
+  }
+
+  .brand-logo__dark {
+    display: none;
+  }
+
+  [data-theme="dark"] .brand-logo__light,
+  .brand-logo[data-tone="dark"] .brand-logo__light {
+    display: none;
+  }
+
+  [data-theme="dark"] .brand-logo__dark,
+  .brand-logo[data-tone="dark"] .brand-logo__dark {
+    display: inline;
+  }
+}
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);

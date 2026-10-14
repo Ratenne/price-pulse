@@ -26,8 +26,8 @@ export default function ProductDetailPage({ id }: { id: string }) {
   return (
     <div className="app-shell">
       <Header />
-      <main>
-        <section className="container py-8">
+      <main id="main-content">
+        <section className="container detail-intro">
           <Link
             href="/rankings"
             className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -35,15 +35,15 @@ export default function ProductDetailPage({ id }: { id: string }) {
             <ArrowLeft className="h-4 w-4" /> 전체 순위
           </Link>
 
-          <div className="mt-6 grid gap-8 lg:grid-cols-[360px_1fr]">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-6">
+          <div className="detail-layout">
+            <div className="detail-image">
               <img
                 src={product.imageUrl}
                 alt={`${product.displayName} 대표 이미지`}
                 className="h-64 w-full object-contain"
               />
             </div>
-            <div>
+            <div className="detail-info">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-[var(--sky-blue-soft)] px-3 py-1 text-xs font-semibold text-[var(--sky-blue-strong)]">
                   {getCategoryLabel(product.category)}
@@ -67,7 +67,7 @@ export default function ProductDetailPage({ id }: { id: string }) {
               <p className="mt-1 text-3xl font-extrabold text-[var(--text-primary)]">
                 {formatPrice(product.currentPrice)}
               </p>
-              <div className="mt-7 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+              <div className="mt-7 rounded-xl bg-[var(--surface)] p-5">
                 <PriceRangeBar product={product} />
               </div>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -101,15 +101,20 @@ export default function ProductDetailPage({ id }: { id: string }) {
         </section>
 
         <section className="border-y border-[var(--border)] bg-[var(--surface-muted)] py-12">
-          <div className="container rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 md:p-7">
-            <PriceHistoryChart product={product} height={300} />
+          <div className="container">
+            <div className="detail-chart">
+              <PriceHistoryChart product={product} height={300} />
+            </div>
           </div>
         </section>
 
         <section className="container py-12">
           <div className="grid gap-6 md:grid-cols-2">
             <article className="perspective-card perspective-card--buyer">
-              <Eye className="h-6 w-6 text-[var(--sky-blue-strong)]" />
+              <Eye
+                className="h-6 w-6 text-[var(--sky-blue-strong)]"
+                aria-hidden="true"
+              />
               <h2 className="mt-4 text-xl font-bold text-[var(--text-primary)]">
                 구매자 관점
               </h2>
@@ -120,7 +125,10 @@ export default function ProductDetailPage({ id }: { id: string }) {
               </ul>
             </article>
             <article className="perspective-card perspective-card--seller">
-              <HandCoins className="h-6 w-6 text-[var(--orange-strong)]" />
+              <HandCoins
+                className="h-6 w-6 text-[var(--orange-strong)]"
+                aria-hidden="true"
+              />
               <h2 className="mt-4 text-xl font-bold text-[var(--text-primary)]">
                 판매자 관점
               </h2>
@@ -145,8 +153,10 @@ export default function ProductDetailPage({ id }: { id: string }) {
             </div>
             <p className="mt-6 text-xs text-[var(--text-muted)]">
               데이터 업데이트:{" "}
-              {new Date(product.updatedAt).toLocaleString("ko-KR")} · 현재
-              가격은 서비스 시연용 예시입니다.
+              {new Date(product.updatedAt).toLocaleString("ko-KR", {
+                timeZone: "Asia/Seoul",
+              })}{" "}
+              · 현재 가격은 서비스 시연용 예시입니다.
             </p>
           </div>
         </section>
