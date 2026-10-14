@@ -3,7 +3,7 @@ import type { Product } from "../../client/src/domain/product";
 import {
   PRODUCT_CATEGORIES,
   type ProductCategory,
-} from "../../client/src/domain/category";
+} from "../../client/src/domain/category.js";
 
 export interface CatalogRow {
   id: string;
