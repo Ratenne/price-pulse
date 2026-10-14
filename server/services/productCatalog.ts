@@ -4,6 +4,11 @@ import {
   PRODUCT_CATEGORIES,
   type ProductCategory,
 } from "../../client/src/domain/category.js";
+import { completedPriceWindow } from "../domain/priceCalendar.js";
+import {
+  readLivePrices,
+  type LivePrices,
+} from "../integrations/danawa/danawaLivePrices.js";
 
 export interface CatalogRow {
   id: string;
@@ -12,10 +17,15 @@ export interface CatalogRow {
   current_price: string | null;
   updated_at: string;
   source_url: string;
+  external_product_id?: string;
   history: { date: string; price: number }[];
 }
 
-export function toCatalogProduct(row: CatalogRow): Product | undefined {
+export function toCatalogProduct(
+  row: CatalogRow,
+  live?: LivePrices,
+  now = new Date()
+): Product | undefined {
   const category: ProductCategory | undefined =
     row.category === "PC 주요 부품_그래픽카드" || row.category === "GPU"
       ? "GPU"
@@ -25,23 +35,25 @@ export function toCatalogProduct(row: CatalogRow): Product | undefined {
           ? "LAPTOP"
           : undefined;
   if (!category || !row.history.length) return undefined;
-  const history = [...row.history].sort((a, b) => a.date.localeCompare(b.date));
+  const { currentMonth, fromMonth } = completedPriceWindow(now);
+  const history = row.history
+    .filter(point => point.date < currentMonth)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!history.length) return undefined;
   const latest = history.at(-1)!;
-  const [year, month] = latest.date.split("-").map(Number);
-  const cutoff = new Date(Date.UTC(year, month - 6, 1))
-    .toISOString()
-    .slice(0, 7);
-  const priceHistory = history.filter(point => point.date >= cutoff);
+  const priceHistory = history.filter(point => point.date >= fromMonth);
+  if (!priceHistory.length) return undefined;
   const values = priceHistory.map(point => point.price);
   const low = Math.min(...values);
   const high = Math.max(...values);
-  const current = row.current_price ? Number(row.current_price) : latest.price;
-  const previous = history.at(-2)?.price ?? latest.price;
+  const current = live?.prices.get(row.external_product_id ?? "") ?? null;
+  const previous = latest.price;
   const range = high - low;
-  const position = range
-    ? Math.max(0, Math.min(100, ((current - low) / range) * 100))
-    : 50;
-  const change = current - previous;
+  const position =
+    current !== null && range
+      ? Math.max(0, Math.min(100, ((current - low) / range) * 100))
+      : 50;
+  const change = current === null ? 0 : current - previous;
   const changeRate = (change / previous) * 100;
   return {
     id: row.id,
@@ -65,30 +77,40 @@ export function toCatalogProduct(row: CatalogRow): Product | undefined {
     priceRangeAmount: range,
     priceRangeRate: (range / low) * 100,
     currentPositionRate: position,
-    lowestPriceDifferenceRate: ((current - low) / low) * 100,
+    lowestPriceDifferenceRate:
+      current === null ? 0 : ((current - low) / low) * 100,
     fairPriceMin: Math.round((low + range * 0.28) / 1000) * 1000,
     fairPriceMax: Math.round((low + range * 0.58) / 1000) * 1000,
     priceStatus:
-      position <= 10
-        ? "VERY_LOW"
-        : position <= 30
-          ? "LOW"
-          : position <= 65
-            ? "FAIR"
-            : position <= 85
-              ? "HIGH"
-              : "VERY_HIGH",
+      current === null
+        ? "UNKNOWN"
+        : position <= 10
+          ? "VERY_LOW"
+          : position <= 30
+            ? "LOW"
+            : position <= 65
+              ? "FAIR"
+              : position <= 85
+                ? "HIGH"
+                : "VERY_HIGH",
     priceHistory,
     updatedAt: row.updated_at,
     sourceUrl: row.source_url,
     latestHistoryMonth: latest.date,
+    currentPriceCheckedAt: live?.checkedAt,
+    currentPriceMonth: currentMonth,
   };
 }
 
-export async function readProductCatalog(pool: Pool): Promise<Product[]> {
-  const result = await pool.query<CatalogRow>(`
+export async function readProductCatalog(
+  pool: Pool,
+  now = new Date()
+): Promise<Product[]> {
+  const [result, live] = await Promise.all([
+    pool.query<CatalogRow>(`
     SELECT p.id, p.name, p.category, p.current_price::text,
-           p.updated_at::text, m.source_url,
+           greatest(p.updated_at, max(h.updated_at))::text AS updated_at,
+           m.source_url, m.external_product_id,
            json_agg(json_build_object('date', to_char(h.price_year_month, 'YYYY-MM'),
                                      'price', h.price) ORDER BY h.price_year_month) AS history
       FROM products p
@@ -96,10 +118,20 @@ export async function readProductCatalog(pool: Pool): Promise<Product[]> {
       JOIN price_histories h ON h.product_id = p.id AND h.source = 'DANAWA'
      WHERE m.source_url LIKE 'https://prod.danawa.com/info/%'
        AND h.granularity = 'MONTH' AND h.source_type = 'HISTORICAL_IMPORT' AND h.price > 0
-     GROUP BY p.id, m.source_url
+     GROUP BY p.id, m.source_url, m.external_product_id
      ORDER BY p.id
-  `);
+  `),
+    readLivePrices().catch(error => {
+      console.warn(
+        JSON.stringify({
+          message: "Danawa live price lookup failed",
+          exceptionType: error instanceof Error ? error.name : typeof error,
+        })
+      );
+      return undefined;
+    }),
+  ]);
   return result.rows
-    .map(toCatalogProduct)
+    .map(row => toCatalogProduct(row, live, now))
     .filter((product): product is Product => !!product);
 }

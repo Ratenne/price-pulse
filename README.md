@@ -1,7 +1,6 @@
 # PricePulse
+
 <img width="866" height="288" alt="ChatGPT_Image_Jul_25__2026__07_03_27_AM_복사본-removebg-preview" src="https://github.com/user-attachments/assets/c66ec0ce-80e0-4309-86b8-489af7f18bf6" />
-
-
 
 PricePulse는 GPU, CPU, 노트북의 가격 흐름을 비교해 구매자와 판매자가 현재 가격 수준과 적정 거래 구간을 판단하도록 돕는 프런트엔드 데모입니다.
 
@@ -185,15 +184,35 @@ Vercel에서는 `api/products.ts` 서버 함수, Express에서는 같은 handler
 DB 비밀번호는 서버의 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` 환경변수로만 전달하며
 `VITE_` 환경변수에 넣지 않습니다. Vercel Production에도 해당 변수를 설정해야 합니다.
 
-각 상품의 최신 저장 월을 포함한 6개월 구간으로 최저·최고·평균과 기존 가격 범위를
-계산합니다. 없는 월은 생성하지 않습니다. `priceHistory.date`는 실제 관측 일자가 아닌
-`YYYY-MM`이며 `latestHistoryMonth`와 `updatedAt`으로 데이터 시점을 표시합니다.
-`currentPrice`는 수집 시점의 상품목록 최저가이며, 없으면 마지막 월별 가격을 사용합니다.
+한국시간 조회 날짜의 직전 달까지 6개월 구간으로 최저·최고·월별 최저가의 평균과 기존
+가격 범위를 계산합니다. 없는 월은 생성하지 않습니다. `priceHistory.date`는 실제 관측
+일자가 아닌 `YYYY-MM`이며 진행 중인 이번 달은 포함하지 않습니다.
+`currentPrice`는 API 요청마다 다나와 상품목록에서 확인한 현재 최저가입니다. DB에
+쓰지 않으며 완료된 조회 결과를 캐시하지 않습니다. 동시에 들어온 요청만 진행 중인
+외부 조회를 공유합니다. 현재가를 찾지 못하면 `null`과 `UNKNOWN` 상태를 반환합니다.
+과거 가격으로 현재가를 대체하지 않습니다. `currentPriceCheckedAt`은 조회 시각,
+`currentPriceMonth`는 한국시간 현재 월입니다. 차트는 이 현재가를 별도의 이번 달
+점으로 표시합니다. 다나와 목록은 페이지당 100개, 요청 간격 1초로 순차 조회하므로
+가격을 불러오는 데 수 초에서 수십 초가 걸릴 수 있습니다.
 적정 범위는 기존 참고용 계산 규칙이며 실시간 가격·예측을 제공하지 않습니다.
 
 상품목록 탐색 없이 수동으로 등록한 테스트 매핑은 원본 URL이 없으므로 공개 목록에서
 제외합니다. CPU·노트북은 해당 카테고리의 DB 상품이 없으면 빈 목록으로 표시됩니다.
-응답은 CDN에서 60초 캐시하며 DB 장애 시 `503 CATALOG_UNAVAILABLE`을 반환합니다.
+응답은 `Cache-Control: no-store`이며 DB 장애 시 `503 CATALOG_UNAVAILABLE`을 반환합니다.
+
+### 주간 가격 갱신
+
+`.github/workflows/refresh-danawa.yml`은 매주 월요일 06:17(한국시간)에 실행됩니다.
+GitHub 예약 실행은 지연될 수 있습니다. 수동 실행도 지원합니다. GitHub repository
+Secrets에 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`가 필요합니다. 기존 매핑 상품을
+순차 처리하며 `24 → 12 → 6` 구간의 **지난달까지 월별 최저가**만 upsert합니다.
+진행 중인 현재 월은 저장하지 않습니다. 기존 Backfill의 10,000건 종료 조건을 사용하지
+않으므로 목표 달성 후에도 등록된 모든 상품을 갱신합니다. 신규 상품 탐색은 기존
+Backfill CLI에서 별도로 실행합니다.
+
+로컬 실행: `node --env-file=.env.local --import tsx server/scripts/refreshDanawa.ts`.
+개별 상품 실패는 격리하며 DB 장애는 전체 실행을 중단합니다. 다나와가 가격을
+제공하지 않는 상품·월을 임의로 채우지 않습니다.
 
 Vite 개발 서버가 출력한 로컬 주소로 접속합니다.
 

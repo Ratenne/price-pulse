@@ -8,6 +8,7 @@ const row: CatalogRow = {
   current_price: "1200",
   updated_at: "2026-08-20T00:00:00Z",
   source_url: "https://prod.danawa.com/info/?pcode=123",
+  external_product_id: "123",
   history: [
     { date: "2025-12", price: 9999 },
     { date: "2026-03", price: 1000 },
@@ -15,10 +16,12 @@ const row: CatalogRow = {
     { date: "2026-08", price: 1200 },
   ],
 };
+const now = new Date("2026-09-14T00:00:00Z");
+const live = { prices: new Map([["123", 1200]]), checkedAt: now.toISOString() };
 
 describe("database product catalog", () => {
-  it("uses six calendar months ending at the latest observed month without interpolation", () => {
-    const product = toCatalogProduct(row)!;
+  it("uses six completed months relative to query date without interpolation", () => {
+    const product = toCatalogProduct(row, live, now)!;
     expect(product.priceHistory.map(p => p.date)).toEqual([
       "2026-03",
       "2026-07",
@@ -30,10 +33,27 @@ describe("database product catalog", () => {
     expect(product.currentPositionRate).toBe(40);
     expect(product.sourceUrl).toBe(row.source_url);
   });
-  it("falls back to the actual latest historical price when no snapshot price exists", () => {
-    expect(
-      toCatalogProduct({ ...row, current_price: null })?.currentPrice
-    ).toBe(1200);
+  it("does not use a stored or historical price as a live price", () => {
+    expect(toCatalogProduct(row, undefined, now)?.currentPrice).toBeNull();
+    expect(toCatalogProduct(row, undefined, now)?.priceStatus).toBe("UNKNOWN");
+  });
+  it("excludes current and future monthly aggregates while keeping live price separate", () => {
+    const product = toCatalogProduct(
+      {
+        ...row,
+        history: [
+          ...row.history,
+          { date: "2026-09", price: 10 },
+          { date: "2026-10", price: 20 },
+        ],
+      },
+      live,
+      now
+    )!;
+    expect(product.priceHistory.at(-1)?.date).toBe("2026-08");
+    expect(product.currentPrice).toBe(1200);
+    expect(product.currentPriceMonth).toBe("2026-09");
+    expect(product.currentPriceCheckedAt).toBe(live.checkedAt);
   });
   it("omits unknown categories and products without history", () => {
     expect(toCatalogProduct({ ...row, category: "UNKNOWN" })).toBeUndefined();

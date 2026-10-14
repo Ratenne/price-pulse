@@ -24,19 +24,24 @@ export function PriceHistoryChart({
     date: point.date.slice(0, 7),
     price: point.price,
   }));
-  const currentPoint = data[data.length - 1];
+  if (product.currentPrice !== null && product.currentPriceMonth) {
+    data.push({ date: product.currentPriceMonth, price: product.currentPrice });
+  }
+  const currentPoint =
+    product.currentPrice !== null && product.currentPriceMonth
+      ? data.at(-1)
+      : undefined;
 
   return (
     <div>
       {showHeading && (
         <div className="chart-heading mb-5">
           <h2 className="text-xl font-bold text-[var(--text-primary)]">
-            6개월 가격 흐름
+            직전 6개월 최저가와 현재 가격
           </h2>
           <p className="text-sm text-[var(--text-secondary)]">
-            {product.priceHistory[0]?.date} ~{" "}
-            {product.latestHistoryMonth ?? product.priceHistory.at(-1)?.date}{" "}
-            월별 최저가 · 가격이 있는 월만 표시합니다.
+            지난달까지는 월별 최저가, 이번 달은 조회 시점 가격입니다. 없는 월은
+            생성하지 않습니다.
           </p>
         </div>
       )}
@@ -87,14 +92,16 @@ export function PriceHistoryChart({
               dot={false}
               isAnimationActive={false}
             />
-            <ReferenceDot
-              x={currentPoint.date}
-              y={currentPoint.price}
-              r={5}
-              fill="var(--orange)"
-              stroke="var(--surface)"
-              strokeWidth={2}
-            />
+            {currentPoint && (
+              <ReferenceDot
+                x={currentPoint.date}
+                y={currentPoint.price}
+                r={5}
+                fill="var(--orange)"
+                stroke="var(--surface)"
+                strokeWidth={2}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>

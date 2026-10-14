@@ -2,7 +2,13 @@ import type { ProductCategory } from "./category";
 
 export type PriceTrend = "RISING" | "FALLING" | "STABLE";
 
-export type PriceStatus = "VERY_LOW" | "LOW" | "FAIR" | "HIGH" | "VERY_HIGH";
+export type PriceStatus =
+  | "VERY_LOW"
+  | "LOW"
+  | "FAIR"
+  | "HIGH"
+  | "VERY_HIGH"
+  | "UNKNOWN";
 
 export interface PriceHistoryPoint {
   date: string;
@@ -32,7 +38,7 @@ export interface Product extends PriceSummary, FairPriceRange {
   displayName: string;
   imageUrl: string;
   tags: string[];
-  currentPrice: number;
+  currentPrice: number | null;
   previousPrice: number;
   changeAmount: number;
   changeRate: number;
@@ -42,6 +48,8 @@ export interface Product extends PriceSummary, FairPriceRange {
   updatedAt: string;
   sourceUrl?: string;
   latestHistoryMonth?: string;
+  currentPriceCheckedAt?: string;
+  currentPriceMonth?: string;
 }
 
 export interface ProductSeed {

@@ -16,6 +16,7 @@ describe("products API", () => {
       res as unknown as ServerResponse
     );
     expect(res.writeHead).toHaveBeenCalledWith(200);
+    expect(res.setHeader).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(JSON.parse(res.end.mock.calls[0][0])).toMatchObject({
       products: [],
       source: "DANAWA",

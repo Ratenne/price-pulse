@@ -34,7 +34,9 @@ export default function CategoriesPage() {
   const summary = getCategorySummary(category, catalog);
   const nearLowest = sortProducts(
     products.filter(
-      product => product.currentPrice <= product.sixMonthLowPrice * 1.1
+      product =>
+        product.currentPrice !== null &&
+        product.currentPrice <= product.sixMonthLowPrice * 1.1
     ),
     "near-low"
   );

@@ -1,0 +1,25 @@
+import { describe, it, expect, vi } from "vitest";
+import { fetchLivePrices } from "./danawaLivePrices";
+describe("read-only live prices", () => {
+  it("reads fresh list pages on every completed request and does not reuse an earlier result", async () => {
+    let price = 100;
+    const fetchPage = vi.fn(async (_category: unknown, page: number) => ({
+      page,
+      totalProductCount: 2,
+      totalPages: 2,
+      products: [
+        {
+          externalProductId: String(page),
+          name: "GPU",
+          category: "GPU",
+          sourceUrl: "https://prod.danawa.com/info/",
+          currentMinPrice: price,
+        },
+      ],
+    }));
+    expect((await fetchLivePrices({ fetchPage })).prices.get("1")).toBe(100);
+    price = 200;
+    expect((await fetchLivePrices({ fetchPage })).prices.get("1")).toBe(200);
+    expect(fetchPage).toHaveBeenCalledTimes(4);
+  });
+});

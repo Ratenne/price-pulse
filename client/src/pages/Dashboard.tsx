@@ -59,8 +59,9 @@ export default function Dashboard({
           </Link>
         </section>
         <p className="container data-notice">
-          다나와에서 수집한 {products.length}개 상품의 월별 최저가입니다. 현재
-          가격은 최근 수집 시점 기준이며 실시간 가격과 다를 수 있습니다.
+          다나와 {products.length}개 상품 · 지난달까지의 월별 최저가는 주 1회
+          갱신합니다. 현재 가격은 화면 조회 시 다나와에서 확인하며 DB에 저장하지
+          않습니다.
         </p>
       </main>
       <SiteFooter />

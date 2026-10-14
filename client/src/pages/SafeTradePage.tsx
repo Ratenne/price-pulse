@@ -116,8 +116,8 @@ export default function SafeTradePage() {
                 </article>
               ))}
               <p className="mt-6 text-xs text-[var(--text-muted)]">
-                가격은 다나와 수집 시점 기준입니다. 적정 범위는 참고용 계산이며
-                실제 거래를 보장하지 않습니다.
+                과거는 월별 최저가, 현재가는 조회 시점 기준입니다. 적정 범위는
+                참고용 계산이며 실제 거래를 보장하지 않습니다.
               </p>
             </div>
           </div>

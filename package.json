@@ -9,6 +9,7 @@
     "build": "vite build && esbuild server/index.ts server/scripts/backfillDanawa.ts server/scripts/bulkBackfillDanawa.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "backfill:danawa": "node dist/scripts/backfillDanawa.js",
     "backfill:danawa:bulk": "node dist/scripts/bulkBackfillDanawa.js",
+    "refresh:danawa": "tsx server/scripts/refreshDanawa.ts",
     "start": "NODE_ENV=production node dist/index.js",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",

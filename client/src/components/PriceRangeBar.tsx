@@ -36,10 +36,12 @@ export function PriceRangeBar({
           className="price-range__fair"
           style={{ left: `${fairStart}%`, width: `${fairEnd - fairStart}%` }}
         />
-        <span
-          className="price-range__marker"
-          style={{ left: `${markerPosition}%` }}
-        />
+        {product.currentPrice !== null && (
+          <span
+            className="price-range__marker"
+            style={{ left: `${markerPosition}%` }}
+          />
+        )}
       </div>
       <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-[var(--text-muted)]">
         <span className="whitespace-nowrap">
