@@ -5,7 +5,8 @@
 
 PricePulse는 GPU, CPU, 노트북의 가격 흐름을 비교해 구매자와 판매자가 현재 가격 수준과 적정 거래 구간을 판단하도록 돕는 프런트엔드 데모입니다.
 
-현재 버전은 실제 판매처 API나 크롤러를 사용하지 않습니다. 화면에 표시되는 가격과 가격 이력은 서비스 시연을 위한 목업 데이터입니다.
+화면은 서비스 시연용 목업 데이터를 사용합니다. 별도의 서버 측 CLI가 다나와의 실제
+상품 목록과 월별 가격 이력을 수집해 Supabase PostgreSQL에 초기 데이터셋을 구축합니다.
 
 ## 주요 기능
 
@@ -132,7 +133,12 @@ client/
     ├── App.tsx                  # Provider와 라우팅
     └── index.css                # 테마 토큰과 전역 스타일
 server/
+├── integrations/danawa/         # 다나와 목록·가격 이력 client와 parser
+├── repositories/                # PostgreSQL 상품·가격 저장소
+├── services/                    # 단일·대량 Backfill 흐름
+├── scripts/                     # 서버 측 CLI 진입점
 └── index.ts                     # 프로덕션 정적 파일 서버
+database/                        # 재현 가능한 PostgreSQL 스키마 SQL
 ```
 
 ## 라우팅
@@ -193,6 +199,64 @@ pnpm run preview
 # 단위 테스트
 pnpm run test
 ```
+
+## Supabase 가격 이력 Backfill
+
+서버는 Supabase를 일반 PostgreSQL datasource로 사용합니다. `.env.example`을 참고해
+`DB_URL`, `DB_USERNAME`, `DB_PASSWORD`를 실행 환경에 설정하고 실제 값은 커밋하지 않습니다.
+Supabase Dashboard의 **SQL Editor**에서 다음 파일을 순서대로 실행합니다.
+
+1. `database/001_initial_price_history.sql`: 상품, 외부 상품 매핑, 월별 가격 이력과 unique 제약
+2. `database/002_product_discovery_fields.sql`: 탐색 시점 최저가, 등록월, 원본 상품 URL
+
+PricePulse 상품과 다나와 상품 코드는 다음과 같이 연결합니다. 상품 ID는 현재 프런트
+도메인과 동일한 문자열을 사용합니다.
+
+```sql
+INSERT INTO products (id, name, category)
+VALUES ('gpu-rtx-5080', 'GeForce RTX 5080 그래픽카드', 'GPU')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO product_source_mappings (product_id, source, external_product_id)
+VALUES ('gpu-rtx-5080', 'DANAWA', '9503733')
+ON CONFLICT (product_id, source)
+DO UPDATE SET external_product_id = EXCLUDED.external_product_id, updated_at = now();
+```
+
+스키마와 매핑을 준비한 뒤 공개 API 없이 내부 CLI로 한 상품을 수집할 수 있습니다.
+
+```bash
+pnpm run build
+pnpm run backfill:danawa -- gpu-rtx-5080
+```
+
+GPU 상품을 대량 탐색하고 유효 이력 10,000건을 목표로 Backfill하려면 다음 명령을
+사용합니다. 브라우저에 DB 관리자 권한을 노출하지 않고 서버 측 Node 실행 환경에서만
+동작합니다.
+
+```bash
+pnpm run build
+pnpm run backfill:danawa:bulk
+```
+
+수집기는 월별 데이터인 `"24".result`를 우선하고 유효 데이터가 없으면 `"12"`, `"6"`
+순으로 하나의 구간만 선택합니다. 동일 월·동일 가격은 건너뛰고 가격이 달라졌으면 기존
+행을 갱신합니다. 상품별 가격 저장은 트랜잭션으로 처리하며 DB unique 제약도 중복을
+차단합니다. 개별 상품의 HTTP·파싱 실패는 기록하고 다음 상품을 계속 처리합니다.
+
+다음 환경변수로 외부 요청과 실행 규모를 조절할 수 있습니다. 기본값은 외부 서비스에
+부담을 주지 않도록 요청 간격 1초, 동시성 1, 재시도 2회입니다.
+
+| 환경변수                    |  기본값 | 설명                              |
+| --------------------------- | ------: | --------------------------------- |
+| `DANAWA_REQUEST_DELAY_MS`   |  `1000` | 전체 다나와 요청 사이 최소 간격   |
+| `DANAWA_MAX_CONCURRENCY`    |     `1` | 상품 처리 동시성, 최대 5          |
+| `DANAWA_RETRY_COUNT`        |     `2` | 429·5xx·네트워크 오류 재시도 횟수 |
+| `DANAWA_RETRY_BACKOFF_MS`   |  `2000` | 재시도 기본 backoff               |
+| `DANAWA_REQUEST_TIMEOUT_MS` | `10000` | 요청 timeout                      |
+| `DANAWA_BATCH_SIZE`         |    `30` | 페이지 내 처리 batch 크기         |
+| `DANAWA_LIST_COUNT`         |    `30` | 목록 페이지당 상품 수             |
+| `DANAWA_TARGET_PRICE_COUNT` | `10000` | DB 유효 이력 종료 목표            |
 
 CI에서는 타입 검사, 단위 테스트, 프로덕션 빌드를 순서대로 실행합니다.
 
