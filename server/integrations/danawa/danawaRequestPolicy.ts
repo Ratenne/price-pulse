@@ -1,4 +1,4 @@
-import { DanawaIntegrationError } from "./danawaErrors";
+import { DanawaIntegrationError } from "./danawaErrors.js";
 export type FetchFunction = typeof fetch;
 
 export interface DanawaRequestPolicyOptions {

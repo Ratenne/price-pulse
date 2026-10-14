@@ -1,8 +1,8 @@
 import type { DiscoveredProductPage } from "../../domain/discoveredProduct";
 import type { DanawaCategoryMapping } from "./danawaCategory";
-import { DanawaIntegrationError } from "./danawaErrors";
-import { parseDanawaProductList } from "./danawaProductListParser";
-import { DanawaRequestPolicy } from "./danawaRequestPolicy";
+import { DanawaIntegrationError } from "./danawaErrors.js";
+import { parseDanawaProductList } from "./danawaProductListParser.js";
+import { DanawaRequestPolicy } from "./danawaRequestPolicy.js";
 
 const PRODUCT_LIST_ENDPOINT =
   "https://prod.danawa.com/list/ajax/getProductList.ajax.php";

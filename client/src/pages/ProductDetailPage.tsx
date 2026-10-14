@@ -75,7 +75,7 @@ export default function ProductDetailPage({ id }: { id: string }) {
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="summary-card">
                   <span className="text-xs text-[var(--text-muted)]">
-                    평균 가격
+                    월별 최저가 평균
                   </span>
                   <strong className="mt-1 block text-[var(--text-primary)]">
                     {formatPrice(product.sixMonthAveragePrice)}
@@ -158,8 +158,13 @@ export default function ProductDetailPage({ id }: { id: string }) {
               {new Date(product.updatedAt).toLocaleString("ko-KR", {
                 timeZone: "Asia/Seoul",
               })}{" "}
-              · 마지막 이력 월: {product.latestHistoryMonth} · 현재 가격은 수집
-              시점 기준입니다.
+              · 마지막 이력 월: {product.latestHistoryMonth} · 현재가 조회:{" "}
+              {product.currentPriceCheckedAt
+                ? new Date(product.currentPriceCheckedAt).toLocaleString(
+                    "ko-KR",
+                    { timeZone: "Asia/Seoul" }
+                  )
+                : "실패"}
               {product.sourceUrl && (
                 <a
                   href={product.sourceUrl}

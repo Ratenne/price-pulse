@@ -5,6 +5,7 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
   "cleanUrls": true,
+  "functions": { "api/products.ts": { "maxDuration": 120 } },
   "git": {
     "deploymentEnabled": {
       "main": false

@@ -15,10 +15,7 @@ export function createProductsHandler(
     }
     try {
       const products = await read();
-      res.setHeader(
-        "Cache-Control",
-        "public, max-age=0, s-maxage=60, stale-while-revalidate=300"
-      );
+      res.setHeader("Cache-Control", "no-store");
       res
         .writeHead(200)
         .end(

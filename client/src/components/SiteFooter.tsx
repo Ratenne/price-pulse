@@ -18,8 +18,8 @@ export function SiteFooter() {
         <div className="footer-bottom">
           <span>© 2026 PricePulse</span>
           <p>
-            다나와 수집 시점 가격입니다. 적정 범위는 참고용이며 실제 거래 가격을
-            보장하지 않습니다.
+            과거는 다나와 월별 최저가, 현재가는 조회 시점 기준입니다. 적정
+            범위는 참고용입니다.
           </p>
         </div>
       </div>

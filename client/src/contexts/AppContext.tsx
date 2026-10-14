@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { Product } from "@/domain/product";
 import { fetchProducts } from "@/services/productService";
+import { useLocation } from "wouter";
 
 interface AppContextType {
   isLoading: boolean;
@@ -42,6 +43,7 @@ function shouldShowIntro(): boolean {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
   const [isLoading, setIsLoadingState] = useState(() => shouldShowIntro());
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -63,7 +65,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!controller.signal.aborted) setProductsLoading(false);
       });
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, location]);
 
   const setLoadingComplete = () => {
     try {

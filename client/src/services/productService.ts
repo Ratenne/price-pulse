@@ -15,8 +15,13 @@ export function sortProducts(
   sort: ProductSort = "range"
 ): Product[] {
   return [...products].sort((a, b) => {
-    if (sort === "price-asc") return a.currentPrice - b.currentPrice;
-    if (sort === "price-desc") return b.currentPrice - a.currentPrice;
+    if (sort !== "range") {
+      if (a.currentPrice === null && b.currentPrice === null) return 0;
+      if (a.currentPrice === null) return 1;
+      if (b.currentPrice === null) return -1;
+    }
+    if (sort === "price-asc") return a.currentPrice! - b.currentPrice!;
+    if (sort === "price-desc") return b.currentPrice! - a.currentPrice!;
     if (sort === "near-low") {
       return a.lowestPriceDifferenceRate - b.lowestPriceDifferenceRate;
     }
@@ -57,7 +62,9 @@ export function getNearLowestPriceProducts(
 ): Product[] {
   const products = sortProducts(
     catalog.filter(
-      product => product.currentPrice <= product.sixMonthLowPrice * 1.1
+      product =>
+        product.currentPrice !== null &&
+        product.currentPrice <= product.sixMonthLowPrice * 1.1
     ),
     "near-low"
   );
@@ -81,8 +88,14 @@ export function getRelatedProducts(
     .filter(candidate => candidate.id !== product.id)
     .sort(
       (a, b) =>
-        Math.abs(a.currentPrice - product.currentPrice) -
-        Math.abs(b.currentPrice - product.currentPrice)
+        Math.abs(
+          (a.currentPrice ?? a.sixMonthAveragePrice) -
+            (product.currentPrice ?? product.sixMonthAveragePrice)
+        ) -
+        Math.abs(
+          (b.currentPrice ?? b.sixMonthAveragePrice) -
+            (product.currentPrice ?? product.sixMonthAveragePrice)
+        )
     )
     .slice(0, limit);
 }
@@ -101,7 +114,9 @@ export function getCategorySummary(
     productCount: products.length,
     averageRangeRate,
     nearLowestCount: products.filter(
-      product => product.currentPrice <= product.sixMonthLowPrice * 1.1
+      product =>
+        product.currentPrice !== null &&
+        product.currentPrice <= product.sixMonthLowPrice * 1.1
     ).length,
   };
 }
