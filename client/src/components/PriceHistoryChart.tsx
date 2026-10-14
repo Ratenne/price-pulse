@@ -21,10 +21,7 @@ export function PriceHistoryChart({
   showHeading?: boolean;
 }) {
   const data = product.priceHistory.map(point => ({
-    date: new Date(point.date).toLocaleDateString("ko-KR", {
-      month: "short",
-      day: "numeric",
-    }),
+    date: point.date.slice(0, 7),
     price: point.price,
   }));
   const currentPoint = data[data.length - 1];
@@ -37,7 +34,9 @@ export function PriceHistoryChart({
             6개월 가격 흐름
           </h2>
           <p className="text-sm text-[var(--text-secondary)]">
-            기간별 가격 변화를 확인하세요.
+            {product.priceHistory[0]?.date} ~{" "}
+            {product.latestHistoryMonth ?? product.priceHistory.at(-1)?.date}{" "}
+            월별 최저가 · 가격이 있는 월만 표시합니다.
           </p>
         </div>
       )}
@@ -81,7 +80,7 @@ export function PriceHistoryChart({
               labelStyle={{ color: "var(--text-secondary)" }}
             />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="price"
               stroke="var(--sky-blue-strong)"
               strokeWidth={2.5}

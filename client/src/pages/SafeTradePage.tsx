@@ -5,9 +5,11 @@ import { Eye, HandCoins, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { getTopPriceRangeProducts } from "@/services/productService";
 import { formatPrice } from "@/lib/productFormatting";
+import { useAppContext } from "@/contexts/AppContext";
 
 export default function SafeTradePage() {
-  const example = getTopPriceRangeProducts(1)[0];
+  const { products } = useAppContext();
+  const example = getTopPriceRangeProducts(1, products)[0];
   return (
     <div className="app-shell">
       <Header />
@@ -114,8 +116,8 @@ export default function SafeTradePage() {
                 </article>
               ))}
               <p className="mt-6 text-xs text-[var(--text-muted)]">
-                가격 데이터와 적정 범위는 서비스 시연을 위한 예시이며 실제
-                거래를 보장하지 않습니다.
+                가격은 다나와 수집 시점 기준입니다. 적정 범위는 참고용 계산이며
+                실제 거래를 보장하지 않습니다.
               </p>
             </div>
           </div>

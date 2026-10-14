@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite --host",
+    "dev:api": "node --env-file=.env.local --import tsx server/index.ts",
     "build": "vite build && esbuild server/index.ts server/scripts/backfillDanawa.ts server/scripts/bulkBackfillDanawa.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "backfill:danawa": "node dist/scripts/backfillDanawa.js",
     "backfill:danawa:bulk": "node dist/scripts/bulkBackfillDanawa.js",

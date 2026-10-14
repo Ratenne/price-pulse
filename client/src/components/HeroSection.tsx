@@ -29,7 +29,7 @@ export function HeroSection({
           </Link>
           <div className="hero-note">
             <ChartNoAxesCombined size={17} aria-hidden="true" /> 6개월 가격 기록
-            · 3개 카테고리 <span>시연용 데이터</span>
+            <span>다나와 월별 최저가</span>
           </div>
         </div>
         <div className="hero-market" data-ui>

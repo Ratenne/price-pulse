@@ -31,7 +31,14 @@ function PageLoading() {
 }
 
 function AppContent() {
-  const { isLoading, setLoadingComplete } = useAppContext();
+  const {
+    isLoading,
+    setLoadingComplete,
+    productsLoading,
+    productsError,
+    products,
+    retryProducts,
+  } = useAppContext();
   const [location] = useLocation();
 
   useEffect(() => {
@@ -46,20 +53,35 @@ function AppContent() {
         inert={isLoading ? true : undefined}
       >
         <Suspense fallback={<PageLoading />}>
-          <Switch>
-            <Route path={"/"}>
-              <Dashboard ambientEnabled={!isLoading} />
-            </Route>
-            <Route path={"/rankings"} component={RankingsPage} />
-            <Route path={"/categories"} component={CategoriesPage} />
-            <Route path={"/safe-trade"} component={SafeTradePage} />
-            <Route path="/products/:id">
-              {params => <ProductDetailPage id={params.id} />}
-            </Route>
-            <Route path={"/404"} component={NotFound} />
-            {/* Final fallback route */}
-            <Route component={NotFound} />
-          </Switch>
+          {productsLoading ? (
+            <PageLoading />
+          ) : productsError ? (
+            <main className="container py-24" role="alert">
+              <p>{productsError}</p>
+              <button className="button-primary mt-5" onClick={retryProducts}>
+                다시 불러오기
+              </button>
+            </main>
+          ) : products.length === 0 ? (
+            <main className="container py-24">
+              <p>아직 조회 가능한 상품 가격 이력이 없습니다.</p>
+            </main>
+          ) : (
+            <Switch>
+              <Route path={"/"}>
+                <Dashboard ambientEnabled={!isLoading} />
+              </Route>
+              <Route path={"/rankings"} component={RankingsPage} />
+              <Route path={"/categories"} component={CategoriesPage} />
+              <Route path={"/safe-trade"} component={SafeTradePage} />
+              <Route path="/products/:id">
+                {params => <ProductDetailPage id={params.id} />}
+              </Route>
+              <Route path={"/404"} component={NotFound} />
+              {/* Final fallback route */}
+              <Route component={NotFound} />
+            </Switch>
+          )}
         </Suspense>
       </div>
       {isLoading && (

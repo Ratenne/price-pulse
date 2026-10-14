@@ -43,6 +43,9 @@ export function createDatabaseConfig(
     password:
       env.DB_PASSWORD || decodeURIComponent(databaseUrl.password) || undefined,
     max: parsePositiveInteger(env.DB_POOL_MAX, 5),
+    connectionTimeoutMillis: 8_000,
+    idleTimeoutMillis: 30_000,
+    statement_timeout: 10_000,
     ssl: sslEnabled ? { rejectUnauthorized: false } : false,
   };
 }

@@ -14,14 +14,16 @@ import { getProductById, getRelatedProducts } from "@/services/productService";
 import { ArrowLeft, Eye, HandCoins } from "lucide-react";
 import { Link } from "wouter";
 import NotFound from "./NotFound";
+import { useAppContext } from "@/contexts/AppContext";
 
 export default function ProductDetailPage({ id }: { id: string }) {
-  const product = getProductById(id);
+  const { products } = useAppContext();
+  const product = getProductById(id, products);
   if (!product) return <NotFound />;
 
   const buyerMessages = getBuyerPerspective(product);
   const sellerMessages = getSellerPerspective(product);
-  const relatedProducts = getRelatedProducts(product);
+  const relatedProducts = getRelatedProducts(product, 3, products);
 
   return (
     <div className="app-shell">
@@ -156,7 +158,18 @@ export default function ProductDetailPage({ id }: { id: string }) {
               {new Date(product.updatedAt).toLocaleString("ko-KR", {
                 timeZone: "Asia/Seoul",
               })}{" "}
-              · 현재 가격은 서비스 시연용 예시입니다.
+              · 마지막 이력 월: {product.latestHistoryMonth} · 현재 가격은 수집
+              시점 기준입니다.
+              {product.sourceUrl && (
+                <a
+                  href={product.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-link ml-3"
+                >
+                  다나와 원본 보기
+                </a>
+              )}
             </p>
           </div>
         </section>

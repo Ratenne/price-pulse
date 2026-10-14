@@ -18,8 +18,8 @@ export default function Dashboard({
   ambientEnabled?: boolean;
 }) {
   const { products } = useAppContext();
-  const topProducts = getTopPriceRangeProducts(10);
-  const nearLowest = getNearLowestPriceProducts(3);
+  const topProducts = getTopPriceRangeProducts(10, products);
+  const nearLowest = getNearLowestPriceProducts(3, products);
   return (
     <div className="app-shell">
       <Header />
@@ -59,8 +59,8 @@ export default function Dashboard({
           </Link>
         </section>
         <p className="container data-notice">
-          현재 {products.length}개 상품의 가격은 서비스 시연을 위한 예시
-          데이터입니다.
+          다나와에서 수집한 {products.length}개 상품의 월별 최저가입니다. 현재
+          가격은 최근 수집 시점 기준이며 실시간 가격과 다를 수 있습니다.
         </p>
       </main>
       <SiteFooter />

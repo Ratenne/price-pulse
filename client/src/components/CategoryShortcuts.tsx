@@ -5,8 +5,10 @@ import {
 import { getCategorySummary } from "@/services/productService";
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "wouter";
+import { useAppContext } from "@/contexts/AppContext";
 
 export function CategoryShortcuts() {
+  const { products } = useAppContext();
   return (
     <section className="category-shortcuts">
       <div className="container">
@@ -17,7 +19,7 @@ export function CategoryShortcuts() {
         <div className="category-grid">
           {VISIBLE_PRODUCT_CATEGORIES.map(category => {
             const definition = PRODUCT_CATEGORIES[category];
-            const summary = getCategorySummary(category);
+            const summary = getCategorySummary(category, products);
             return (
               <Link
                 key={category}

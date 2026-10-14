@@ -17,7 +17,10 @@ export function SiteFooter() {
         </div>
         <div className="footer-bottom">
           <span>© 2026 PricePulse</span>
-          <p>가격 데이터와 적정 범위는 서비스 시연용 예시입니다.</p>
+          <p>
+            다나와 수집 시점 가격입니다. 적정 범위는 참고용이며 실제 거래 가격을
+            보장하지 않습니다.
+          </p>
         </div>
       </div>
     </footer>

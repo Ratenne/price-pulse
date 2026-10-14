@@ -17,19 +17,21 @@ import {
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
+import { useAppContext } from "@/contexts/AppContext";
 
 function getInitialCategory(): ProductCategory {
   const value = new URLSearchParams(window.location.search).get("category");
   return isProductCategory(value) ? value : "GPU";
 }
 export default function CategoriesPage() {
+  const { products: catalog } = useAppContext();
   const [category, setCategory] = useState<ProductCategory>(getInitialCategory);
   const definition = PRODUCT_CATEGORIES[category];
   const products = useMemo(
-    () => sortProducts(getProductsByCategory(category), "range"),
-    [category]
+    () => sortProducts(getProductsByCategory(category, catalog), "range"),
+    [category, catalog]
   );
-  const summary = getCategorySummary(category);
+  const summary = getCategorySummary(category, catalog);
   const nearLowest = sortProducts(
     products.filter(
       product => product.currentPrice <= product.sixMonthLowPrice * 1.1
@@ -140,12 +142,16 @@ export default function CategoriesPage() {
             <span>{products.length}개 상품</span>
           </div>
           <div className="product-grid">
+            {products.length === 0 && (
+              <p>이 카테고리에는 아직 수집된 상품이 없습니다.</p>
+            )}
             {products.map(product => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
           <p className="data-notice">
-            상품 가격과 가격 범위는 서비스 시연을 위한 예시입니다.
+            다나와 월별 최저가 기준이며, 수집되지 않은 월은 표시하지 않습니다.
+            적정 범위는 참고용 계산입니다.
           </p>
         </section>
       </main>

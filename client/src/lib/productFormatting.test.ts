@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getProductById } from "@/services/productService";
+import mockProducts from "@/data/mockProducts";
 import {
   formatPrice,
   formatRate,
@@ -15,7 +16,7 @@ describe("productFormatting", () => {
   });
 
   it("creates buyer and seller explanations from product data", () => {
-    const product = getProductById("cpu-ultra-5-245k");
+    const product = getProductById("cpu-ultra-5-245k", mockProducts);
     expect(product).toBeDefined();
 
     expect(getBuyerPerspective(product!).length).toBeGreaterThan(0);
@@ -23,8 +24,8 @@ describe("productFormatting", () => {
   });
 
   it("shows a near-low message only inside the configured threshold", () => {
-    const nearLow = getProductById("gpu-rtx-5070");
-    const expensive = getProductById("gpu-rtx-5090");
+    const nearLow = getProductById("gpu-rtx-5070", mockProducts);
+    const expensive = getProductById("gpu-rtx-5090", mockProducts);
     expect(nearLow).toBeDefined();
     expect(expensive).toBeDefined();
 

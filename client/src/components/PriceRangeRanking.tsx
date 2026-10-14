@@ -5,18 +5,20 @@ import {
   VISIBLE_PRODUCT_CATEGORIES,
   type ProductCategory,
 } from "@/domain/category";
-import { getProducts, sortProducts } from "@/services/productService";
+import { sortProducts } from "@/services/productService";
+import { useAppContext } from "@/contexts/AppContext";
 import { ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
 
 export function PriceRangeRanking({ products }: { products: Product[] }) {
+  const { products: catalog } = useAppContext();
   const [category, setCategory] = useState<ProductCategory | "ALL">("ALL");
   const visible =
     category === "ALL"
       ? products
       : sortProducts(
-          getProducts().filter(product => product.category === category)
+          catalog.filter(product => product.category === category)
         ).slice(0, 10);
   return (
     <section className="discovery-section" id="price-rankings">
