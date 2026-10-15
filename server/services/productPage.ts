@@ -93,7 +93,7 @@ const STATS = `WITH stats AS (
  round(avg(h.price))::float8 AS average,(array_agg(h.price ORDER BY h.price_year_month DESC))[1]::float8 AS previous,
  to_char(max(h.price_year_month),'YYYY-MM') AS latest_month,greatest(p.updated_at,max(h.updated_at))::text AS updated_at
  FROM products p JOIN product_source_mappings m ON m.product_id=p.id AND m.source='DANAWA'
- JOIN price_histories h ON h.product_id=p.id AND h.source='DANAWA'
+ JOIN price_histories_for_analysis h ON h.product_id=p.id AND h.source='DANAWA'
  WHERE m.source_url LIKE 'https://prod.danawa.com/info/%' AND h.price>0 AND h.granularity='MONTH'
  AND h.source_type='HISTORICAL_IMPORT' AND h.price_year_month >= $1::date AND h.price_year_month < $2::date
  AND p.category IN ('GPU','PC 주요 부품_그래픽카드','CPU','LAPTOP')
@@ -264,11 +264,20 @@ export async function readProductPage(
   }
   const products = rows.map(row => toProduct(row, window.currentMonth));
   if ((query.view === "home" || query.view === "detail") && products[0]) {
-    const history = await pool.query<{ date: string; price: number }>(
-      `SELECT to_char(price_year_month,'YYYY-MM') AS date,price::float8 AS price FROM price_histories WHERE product_id=$1 AND source='DANAWA' AND granularity='MONTH' AND source_type='HISTORICAL_IMPORT' AND price_year_month >= $2::date AND price_year_month < $3::date ORDER BY price_year_month`,
+    const history = await pool.query<{
+      date: string;
+      price: number;
+      exclusion_reason: string | null;
+    }>(
+      `SELECT to_char(price_year_month,'YYYY-MM') AS date,price::float8 AS price,exclusion_reason FROM reviewed_price_histories WHERE product_id=$1 AND source='DANAWA' AND granularity='MONTH' AND source_type='HISTORICAL_IMPORT' AND price_year_month >= $2::date AND price_year_month < $3::date ORDER BY price_year_month`,
       [products[0].id, ...dates]
     );
-    products[0].priceHistory = history.rows;
+    products[0].priceHistory = history.rows
+      .filter(point => !point.exclusion_reason)
+      .map(({ date, price }) => ({ date, price }));
+    products[0].excludedHistoryMonths = history.rows
+      .filter(point => !!point.exclusion_reason)
+      .map(point => point.date);
   }
   return { products, total, page, pageSize: size, summaries };
 }

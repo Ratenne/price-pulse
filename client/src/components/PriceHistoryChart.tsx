@@ -1,5 +1,6 @@
 import type { Product } from "@/domain/product";
 import { formatPrice, formatCurrentPrice } from "@/lib/productFormatting";
+import { buildPriceChartData } from "@shared/priceChart";
 import {
   CartesianGrid,
   Line,
@@ -20,13 +21,8 @@ export function PriceHistoryChart({
   height?: number;
   showHeading?: boolean;
 }) {
-  const data = product.priceHistory.map(point => ({
-    date: point.date.slice(0, 7),
-    price: point.price,
-  }));
-  if (product.currentPrice !== null && product.currentPriceMonth) {
-    data.push({ date: product.currentPriceMonth, price: product.currentPrice });
-  }
+  const data = buildPriceChartData(product);
+  const excludedCount = product.excludedHistoryMonths?.length ?? 0;
   const currentPoint =
     product.currentPrice !== null && product.currentPriceMonth
       ? data.at(-1)
@@ -45,10 +41,16 @@ export function PriceHistoryChart({
           </p>
         </div>
       )}
+      {excludedCount > 0 && (
+        <p className="mb-3 text-sm text-[var(--text-secondary)]" role="note">
+          검토된 이상치 {excludedCount}건은 차트·통계·순위에서 제외했습니다.
+          해당 월은 선을 연결하지 않으며 원본 데이터는 보존합니다.
+        </p>
+      )}
       <div
         style={{ height }}
         role="img"
-        aria-label={`${product.displayName} 가격 흐름 차트. 현재 가격 ${formatCurrentPrice(product)}`}
+        aria-label={`${product.displayName} 가격 흐름 차트. 현재 가격 ${formatCurrentPrice(product)}${excludedCount ? `. 이상치 ${excludedCount}건 제외` : ""}`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
@@ -87,12 +89,13 @@ export function PriceHistoryChart({
             <Line
               type="linear"
               dataKey="price"
+              connectNulls={false}
               stroke="var(--sky-blue-strong)"
               strokeWidth={2.5}
-              dot={false}
+              dot={{ r: 3, strokeWidth: 0 }}
               isAnimationActive={false}
             />
-            {currentPoint && (
+            {currentPoint && currentPoint.price !== null && (
               <ReferenceDot
                 x={currentPoint.date}
                 y={currentPoint.price}
