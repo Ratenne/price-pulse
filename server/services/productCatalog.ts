@@ -115,7 +115,7 @@ export async function readProductCatalog(
                                      'price', h.price) ORDER BY h.price_year_month) AS history
       FROM products p
       JOIN product_source_mappings m ON m.product_id = p.id AND m.source = 'DANAWA'
-      JOIN price_histories h ON h.product_id = p.id AND h.source = 'DANAWA'
+      JOIN price_histories_for_analysis h ON h.product_id = p.id AND h.source = 'DANAWA'
      WHERE m.source_url LIKE 'https://prod.danawa.com/info/%'
        AND h.granularity = 'MONTH' AND h.source_type = 'HISTORICAL_IMPORT' AND h.price > 0
      GROUP BY p.id, m.source_url, m.external_product_id

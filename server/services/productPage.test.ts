@@ -82,6 +82,36 @@ describe("page-scoped product queries", () => {
     expect("products" in result && result.products[0].priceHistory).toEqual([]);
     expect(query.mock.calls[2][1].slice(-2)).toEqual([10, 10]);
     expect(query).toHaveBeenCalledTimes(3);
+    for (const [sql] of query.mock.calls)
+      expect(sql).toContain("JOIN price_histories_for_analysis");
+  });
+  it("omits reviewed values from chart data but returns the excluded months for gap labels", async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [summary] })
+      .mockResolvedValueOnce({ rows: [{ ...row, low: 1383060 }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          { date: "2026-07", price: 1825960, exclusion_reason: null },
+          { date: "2026-08", price: 1, exclusion_reason: "ISOLATED_LOW" },
+          { date: "2026-09", price: 2760680, exclusion_reason: null },
+        ],
+      });
+    const result = await readProductPage(
+      { query } as unknown as Pool,
+      parseProductQuery("/?view=detail&id=danawa-1"),
+      now
+    );
+    expect("products" in result && result.products[0]).toMatchObject({
+      priceHistory: [
+        { date: "2026-07", price: 1825960 },
+        { date: "2026-09", price: 2760680 },
+      ],
+      excludedHistoryMonths: ["2026-08"],
+    });
+    expect(query.mock.calls[3][0]).toContain("FROM reviewed_price_histories");
+    expect(JSON.stringify(result)).not.toContain("ISOLATED_LOW");
   });
   it("queries current prices for only requested product IDs", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [row] });

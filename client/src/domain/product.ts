@@ -46,6 +46,7 @@ export interface Product extends PriceSummary, FairPriceRange {
   recentTrend: PriceTrend;
   priceStatus: PriceStatus;
   priceHistory: PriceHistoryPoint[];
+  excludedHistoryMonths?: string[];
   updatedAt: string;
   sourceUrl?: string;
   latestHistoryMonth?: string;
