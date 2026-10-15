@@ -32,6 +32,7 @@ export class DanawaRequestPolicy {
 
   async request(url: URL, init: RequestInit): Promise<Response> {
     for (let attempt = 0; attempt <= this.options.retryCount; attempt += 1) {
+      init.signal?.throwIfAborted();
       const now = Date.now();
       const requestAt = Math.max(now, this.nextRequestAt);
       this.nextRequestAt = requestAt + this.options.requestDelayMs;
@@ -40,7 +41,12 @@ export class DanawaRequestPolicy {
       try {
         const response = await this.fetchFunction(url, {
           ...init,
-          signal: AbortSignal.timeout(this.options.timeoutMs),
+          signal: init.signal
+            ? AbortSignal.any([
+                init.signal,
+                AbortSignal.timeout(this.options.timeoutMs),
+              ])
+            : AbortSignal.timeout(this.options.timeoutMs),
         });
         const retryable = response.status === 429 || response.status >= 500;
         if (!retryable || attempt === this.options.retryCount) return response;
@@ -50,6 +56,7 @@ export class DanawaRequestPolicy {
             this.options.retryBackoffMs * (attempt + 1)
         );
       } catch (error) {
+        init.signal?.throwIfAborted();
         if (attempt === this.options.retryCount) {
           throw new DanawaIntegrationError(
             "Danawa request failed after retries",

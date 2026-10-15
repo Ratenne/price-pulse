@@ -8,7 +8,8 @@ export type PriceStatus =
   | "FAIR"
   | "HIGH"
   | "VERY_HIGH"
-  | "UNKNOWN";
+  | "UNKNOWN"
+  | "LOADING";
 
 export interface PriceHistoryPoint {
   date: string;

@@ -7,11 +7,17 @@ export const PRICE_STATUS_LABELS: Record<PriceStatus, string> = {
   HIGH: "높은 가격대",
   VERY_HIGH: "최고가 근접",
   UNKNOWN: "현재가 조회 불가",
+  LOADING: "현재가 확인 중",
 };
 
 export function formatPrice(price: number | null): string {
   if (price === null) return "조회 불가";
   return `${Math.round(price).toLocaleString("ko-KR")}원`;
+}
+export function formatCurrentPrice(product: Product): string {
+  return product.priceStatus === "LOADING"
+    ? "확인 중"
+    : formatPrice(product.currentPrice);
 }
 
 export function formatRate(rate: number): string {
@@ -28,6 +34,10 @@ export function getNearLowestMessage(product: Product): string | null {
 }
 
 export function getBuyerPerspective(product: Product): string[] {
+  if (product.priceStatus === "LOADING")
+    return [
+      "현재 판매 가격을 확인 중입니다. 과거 가격 기록을 먼저 확인할 수 있습니다.",
+    ];
   if (product.currentPrice === null)
     return [
       "현재 판매 가격을 확인할 수 없습니다. 다나와 원본에서 판매 상태를 확인하세요.",
@@ -50,6 +60,8 @@ export function getBuyerPerspective(product: Product): string[] {
 }
 
 export function getSellerPerspective(product: Product): string[] {
+  if (product.priceStatus === "LOADING")
+    return ["현재 판매 가격을 확인 중입니다."];
   if (product.currentPrice === null)
     return [
       "현재 판매 가격을 확인할 수 없습니다. 과거 월별 가격은 참고용입니다.",

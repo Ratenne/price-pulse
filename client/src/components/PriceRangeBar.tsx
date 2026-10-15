@@ -1,5 +1,5 @@
 import type { Product } from "@/domain/product";
-import { formatPrice } from "@/lib/productFormatting";
+import { formatPrice, formatCurrentPrice } from "@/lib/productFormatting";
 
 interface PriceRangeBarProps {
   product: Product;
@@ -29,7 +29,7 @@ export function PriceRangeBar({
   return (
     <div
       className="price-range"
-      aria-label={`가격 범위: 최저 ${formatPrice(product.sixMonthLowPrice)}, 현재 ${formatPrice(product.currentPrice)}, 최고 ${formatPrice(product.sixMonthHighPrice)}`}
+      aria-label={`가격 범위: 최저 ${formatPrice(product.sixMonthLowPrice)}, 현재 ${formatCurrentPrice(product)}, 최고 ${formatPrice(product.sixMonthHighPrice)}`}
     >
       <div className="price-range__track" aria-hidden="true">
         <span

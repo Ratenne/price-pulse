@@ -9,39 +9,29 @@ import {
   VISIBLE_PRODUCT_CATEGORIES,
   type ProductCategory,
 } from "@/domain/category";
-import {
-  getCategorySummary,
-  getProductsByCategory,
-  sortProducts,
-} from "@/services/productService";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
-import { useAppContext } from "@/contexts/AppContext";
+import { useProductPage } from "@/hooks/useProductPage";
+import { ProductLoadState } from "@/components/ProductLoadState";
+import { NearLowestProducts } from "@/components/NearLowestProducts";
 
 function getInitialCategory(): ProductCategory {
   const value = new URLSearchParams(window.location.search).get("category");
   return isProductCategory(value) ? value : "GPU";
 }
 export default function CategoriesPage() {
-  const { products: catalog } = useAppContext();
   const [category, setCategory] = useState<ProductCategory>(getInitialCategory);
+  const [page, setPage] = useState(1);
+  const state = useProductPage(
+    `view=category&category=${category}&page=${page}`
+  );
   const definition = PRODUCT_CATEGORIES[category];
-  const products = useMemo(
-    () => sortProducts(getProductsByCategory(category, catalog), "range"),
-    [category, catalog]
-  );
-  const summary = getCategorySummary(category, catalog);
-  const nearLowest = sortProducts(
-    products.filter(
-      product =>
-        product.currentPrice !== null &&
-        product.currentPrice <= product.sixMonthLowPrice * 1.1
-    ),
-    "near-low"
-  );
+  const products = state.data.products;
+  const summary = state.data.summaries.find(s => s.category === category);
   const selectCategory = (next: ProductCategory) => {
     setCategory(next);
+    setPage(1);
     window.history.replaceState(
       null,
       "",
@@ -84,26 +74,28 @@ export default function CategoriesPage() {
           <dl>
             <dt>비교 상품</dt>
             <dd>
-              {summary.productCount}
+              {summary?.productCount ?? 0}
               <span className="text-sm font-normal"> 개</span>
             </dd>
           </dl>
           <dl>
             <dt>평균 가격 변동폭</dt>
             <dd>
-              {summary.averageRangeRate.toFixed(1)}
+              {(summary?.averageRangeRate ?? 0).toFixed(1)}
               <span className="text-sm font-normal"> %</span>
             </dd>
           </dl>
           <dl>
-            <dt>최저가 근접 상품</dt>
-            <dd>
-              {summary.nearLowestCount}
-              <span className="text-sm font-normal"> 개</span>
-            </dd>
+            <dt>현재 가격</dt>
+            <dd>조회 시 확인</dd>
           </dl>
         </section>
         <section className="container discovery-section">
+          <ProductLoadState
+            loading={state.loading}
+            error={state.error}
+            retry={state.retry}
+          />
           <div className="section-heading">
             <div>
               <h2>{definition.label} 변동폭 순위</h2>
@@ -113,7 +105,10 @@ export default function CategoriesPage() {
               순위 더 보기 <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
-          <ProductList products={products.slice(0, 5)} />
+          <ProductList
+            products={products.slice(0, 5)}
+            offset={(state.data.page - 1) * 10}
+          />
         </section>
         <section className="discovery-section low-price-section">
           <div className="container">
@@ -123,34 +118,47 @@ export default function CategoriesPage() {
                 <p>6개월 최저 가격 대비 10% 이내의 상품입니다.</p>
               </div>
             </div>
-            <div className="product-grid">
-              {nearLowest.length ? (
-                nearLowest
-                  .slice(0, 3)
-                  .map(product => (
-                    <ProductCard key={product.id} product={product} />
-                  ))
-              ) : (
-                <p className="text-[var(--text-secondary)]">
-                  현재 조건에 해당하는 상품이 없습니다.
-                </p>
-              )}
-            </div>
+            {!state.loading && !state.error && <NearLowestProducts category={category} />}
           </div>
         </section>
         <section className="container discovery-section">
           <div className="section-heading">
             <h2>전체 {definition.label}</h2>
-            <span>{products.length}개 상품</span>
+            <span>{state.data.total}개 상품</span>
           </div>
           <div className="product-grid">
-            {products.length === 0 && (
+            {!state.loading && !state.error && products.length === 0 && (
               <p>이 카테고리에는 아직 수집된 상품이 없습니다.</p>
             )}
             {products.map(product => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
+          <nav
+            className="mt-8 flex justify-center gap-4"
+            aria-label="카테고리 상품 페이지"
+          >
+            <button
+              className="pagination-button"
+              disabled={page <= 1 || state.loading}
+              onClick={() => setPage(p => p - 1)}
+            >
+              이전
+            </button>
+            <span>
+              {state.data.page} /{" "}
+              {Math.max(1, Math.ceil(state.data.total / 10))}
+            </span>
+            <button
+              className="pagination-button"
+              disabled={
+                page >= Math.ceil(state.data.total / 10) || state.loading
+              }
+              onClick={() => setPage(p => p + 1)}
+            >
+              다음
+            </button>
+          </nav>
           <p className="data-notice">
             다나와 월별 최저가 기준이며, 수집되지 않은 월은 표시하지 않습니다.
             적정 범위는 참고용 계산입니다.

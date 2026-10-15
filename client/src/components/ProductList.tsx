@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { getCategoryLabel } from "@/domain/category";
 import {
   formatPrice,
+  formatCurrentPrice,
   formatRate,
   PRICE_STATUS_LABELS,
 } from "@/lib/productFormatting";
@@ -31,7 +32,7 @@ export function ProductList({
             <Link
               href={`/products/${product.id}`}
               className="ranking-row"
-              aria-label={`${offset + index + 1}위 ${product.displayName}, 현재 ${formatPrice(product.currentPrice)}, 6개월 변동폭 ${formatRate(product.priceRangeRate)}, ${PRICE_STATUS_LABELS[product.priceStatus]}, 상세보기`}
+              aria-label={`${offset + index + 1}위 ${product.displayName}, 현재 ${formatCurrentPrice(product)}, 6개월 변동폭 ${formatRate(product.priceRangeRate)}, ${PRICE_STATUS_LABELS[product.priceStatus]}, 상세보기`}
             >
               <div className="ranking-product">
                 <span className="rank-number" data-top={offset + index < 3}>
@@ -54,7 +55,7 @@ export function ProductList({
               </div>
               <strong className="ranking-price">
                 <span className="mobile-label">현재 가격</span>
-                {formatPrice(product.currentPrice)}
+                {formatCurrentPrice(product)}
               </strong>
               <div className="ranking-range">
                 <strong>{formatRate(product.priceRangeRate)}</strong>

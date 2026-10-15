@@ -5,21 +5,19 @@ import {
   VISIBLE_PRODUCT_CATEGORIES,
   type ProductCategory,
 } from "@/domain/category";
-import { sortProducts } from "@/services/productService";
-import { useAppContext } from "@/contexts/AppContext";
+import { useProductPage } from "@/hooks/useProductPage";
+import { ProductLoadState } from "./ProductLoadState";
 import { ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
 
 export function PriceRangeRanking({ products }: { products: Product[] }) {
-  const { products: catalog } = useAppContext();
   const [category, setCategory] = useState<ProductCategory | "ALL">("ALL");
-  const visible =
-    category === "ALL"
-      ? products
-      : sortProducts(
-          catalog.filter(product => product.category === category)
-        ).slice(0, 10);
+  const scoped = useProductPage(
+    `view=rankings&category=${category === "ALL" ? "" : category}`,
+    category !== "ALL"
+  );
+  const visible = category === "ALL" ? products : scoped.data.products;
   return (
     <section className="discovery-section" id="price-rankings">
       <div className="container">
@@ -62,6 +60,13 @@ export function PriceRangeRanking({ products }: { products: Product[] }) {
           {visible.length}개
         </div>
         <ProductList products={visible} />
+        {category !== "ALL" && (
+          <ProductLoadState
+            loading={scoped.loading}
+            error={scoped.error}
+            retry={scoped.retry}
+          />
+        )}
       </div>
     </section>
   );

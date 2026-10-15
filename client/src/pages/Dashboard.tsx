@@ -2,13 +2,10 @@ import { CategoryShortcuts } from "@/components/CategoryShortcuts";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
 import { PriceRangeRanking } from "@/components/PriceRangeRanking";
-import { ProductCard } from "@/components/ProductCard";
 import { SiteFooter } from "@/components/SiteFooter";
-import { useAppContext } from "@/contexts/AppContext";
-import {
-  getNearLowestPriceProducts,
-  getTopPriceRangeProducts,
-} from "@/services/productService";
+import { useProductPage } from "@/hooks/useProductPage";
+import { ProductLoadState } from "@/components/ProductLoadState";
+import { NearLowestProducts } from "@/components/NearLowestProducts";
 import { ArrowRight, Scale } from "lucide-react";
 import { Link } from "wouter";
 
@@ -17,18 +14,20 @@ export default function Dashboard({
 }: {
   ambientEnabled?: boolean;
 }) {
-  const { products } = useAppContext();
-  const topProducts = getTopPriceRangeProducts(10, products);
-  const nearLowest = getNearLowestPriceProducts(3, products);
+  const { data, loading, error, retry } = useProductPage("view=home");
+  const topProducts = data.products;
   return (
     <div className="app-shell">
       <Header />
       <main id="main-content">
-        <HeroSection
-          featuredProduct={topProducts[0]}
-          ambientEnabled={ambientEnabled}
-        />
-        <CategoryShortcuts />
+        <ProductLoadState loading={loading} error={error} retry={retry} />
+        {topProducts[0] && (
+          <HeroSection
+            featuredProduct={topProducts[0]}
+            ambientEnabled={ambientEnabled}
+          />
+        )}
+        <CategoryShortcuts summaries={data.summaries} />
         <PriceRangeRanking products={topProducts} />
         <section className="discovery-section low-price-section">
           <div className="container">
@@ -41,11 +40,7 @@ export default function Dashboard({
                 전체 보기 <ArrowRight size={16} aria-hidden="true" />
               </Link>
             </div>
-            <div className="product-grid">
-              {nearLowest.map(product => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
+            {!loading && !error && <NearLowestProducts />}
           </div>
         </section>
         <section className="container trade-banner">
@@ -59,7 +54,7 @@ export default function Dashboard({
           </Link>
         </section>
         <p className="container data-notice">
-          다나와 {products.length}개 상품 · 지난달까지의 월별 최저가는 주 1회
+          다나와 {data.total}개 상품 · 지난달까지의 월별 최저가는 주 1회
           갱신합니다. 현재 가격은 화면 조회 시 다나와에서 확인하며 DB에 저장하지
           않습니다.
         </p>

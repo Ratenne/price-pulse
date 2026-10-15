@@ -2,6 +2,7 @@ import type { Product } from "@/domain/product";
 import { getCategoryLabel } from "@/domain/category";
 import {
   formatPrice,
+  formatCurrentPrice,
   formatRate,
   getNearLowestMessage,
   PRICE_STATUS_LABELS,
@@ -46,7 +47,7 @@ export function ProductCard({
       </Link>
       <div className="card-price">
         <span>현재 가격</span>
-        <strong>{formatPrice(product.currentPrice)}</strong>
+        <strong>{formatCurrentPrice(product)}</strong>
       </div>
       {showRangeAmount && (
         <div className="card-range">
