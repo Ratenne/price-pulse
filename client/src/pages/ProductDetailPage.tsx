@@ -6,6 +6,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { getCategoryLabel } from "@/domain/category";
 import {
   formatPrice,
+  formatCurrentPrice,
   getBuyerPerspective,
   getSellerPerspective,
   PRICE_STATUS_LABELS,
@@ -14,10 +15,26 @@ import { getProductById, getRelatedProducts } from "@/services/productService";
 import { ArrowLeft, Eye, HandCoins } from "lucide-react";
 import { Link } from "wouter";
 import NotFound from "./NotFound";
-import { useAppContext } from "@/contexts/AppContext";
+import { useProductPage } from "@/hooks/useProductPage";
+import { ProductLoadState } from "@/components/ProductLoadState";
 
 export default function ProductDetailPage({ id }: { id: string }) {
-  const { products } = useAppContext();
+  const state = useProductPage(`view=detail&id=${encodeURIComponent(id)}`);
+  const products = state.data.products;
+  if (state.loading || state.error)
+    return (
+      <div className="app-shell">
+        <Header />
+        <main id="main-content">
+          <ProductLoadState
+            loading={state.loading}
+            error={state.error}
+            retry={state.retry}
+          />
+        </main>
+        <SiteFooter />
+      </div>
+    );
   const product = getProductById(id, products);
   if (!product) return <NotFound />;
 
@@ -67,7 +84,7 @@ export default function ProductDetailPage({ id }: { id: string }) {
                 현재 가격
               </p>
               <p className="mt-1 text-3xl font-extrabold text-[var(--text-primary)]">
-                {formatPrice(product.currentPrice)}
+                {formatCurrentPrice(product)}
               </p>
               <div className="mt-7 rounded-xl bg-[var(--surface)] p-5">
                 <PriceRangeBar product={product} />
@@ -164,7 +181,9 @@ export default function ProductDetailPage({ id }: { id: string }) {
                     "ko-KR",
                     { timeZone: "Asia/Seoul" }
                   )
-                : "실패"}
+                : product.priceStatus === "LOADING"
+                  ? "확인 중"
+                  : "실패"}
               {product.sourceUrl && (
                 <a
                   href={product.sourceUrl}

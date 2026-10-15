@@ -2,13 +2,15 @@ import {
   PRODUCT_CATEGORIES,
   VISIBLE_PRODUCT_CATEGORIES,
 } from "@/domain/category";
-import { getCategorySummary } from "@/services/productService";
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "wouter";
-import { useAppContext } from "@/contexts/AppContext";
+import type { CatalogSummary } from "@shared/productPage";
 
-export function CategoryShortcuts() {
-  const { products } = useAppContext();
+export function CategoryShortcuts({
+  summaries,
+}: {
+  summaries: CatalogSummary[];
+}) {
   return (
     <section className="category-shortcuts">
       <div className="container">
@@ -19,7 +21,7 @@ export function CategoryShortcuts() {
         <div className="category-grid">
           {VISIBLE_PRODUCT_CATEGORIES.map(category => {
             const definition = PRODUCT_CATEGORIES[category];
-            const summary = getCategorySummary(category, products);
+            const summary = summaries.find(s => s.category === category);
             return (
               <Link
                 key={category}
@@ -35,10 +37,7 @@ export function CategoryShortcuts() {
                         : "Laptop"}
                   </span>
                   <h3>{definition.label}</h3>
-                  <p>
-                    {summary.productCount}개 상품{" "}
-                    <span>· 최저가 근접 {summary.nearLowestCount}개</span>
-                  </p>
+                  <p>{summary?.productCount ?? 0}개 상품</p>
                 </div>
                 <img src={definition.imageUrl} alt="" width="112" height="80" />
                 <ArrowUpRight

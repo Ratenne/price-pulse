@@ -2,7 +2,11 @@ import type { Product } from "@/domain/product";
 import { Link } from "wouter";
 import { ArrowUpRight, ArrowRight, ChartNoAxesCombined } from "lucide-react";
 import { PriceHistoryChart } from "./PriceHistoryChart";
-import { formatPrice, PRICE_STATUS_LABELS } from "@/lib/productFormatting";
+import {
+  formatPrice,
+  formatCurrentPrice,
+  PRICE_STATUS_LABELS,
+} from "@/lib/productFormatting";
 
 export function HeroSection({
   featuredProduct,
@@ -49,7 +53,7 @@ export function HeroSection({
             <ArrowUpRight size={20} aria-hidden="true" />
           </Link>
           <div className="market-price">
-            <strong>{formatPrice(featuredProduct.currentPrice)}</strong>
+            <strong>{formatCurrentPrice(featuredProduct)}</strong>
             <span
               className="price-status"
               data-status={featuredProduct.priceStatus}

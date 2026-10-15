@@ -16,7 +16,9 @@ export class DanawaProductListClient {
 
   async fetchPage(
     category: DanawaCategoryMapping,
-    page: number
+    page: number,
+    keyword?: string,
+    signal?: AbortSignal
   ): Promise<DiscoveredProductPage> {
     const body = new URLSearchParams({
       btnAllOptUse: "true",
@@ -36,6 +38,7 @@ export class DanawaProductListClient {
       categoryMappingCode: category.categoryMappingCode,
       sProductListApi: "search",
     });
+    if (keyword) body.set("innerSearchKeyword", keyword);
     const response = await this.requestPolicy.request(new URL(this.endpoint), {
       method: "POST",
       headers: {
@@ -45,6 +48,7 @@ export class DanawaProductListClient {
         "X-Requested-With": "XMLHttpRequest",
       },
       body,
+      signal,
     });
     if (!response.ok) {
       throw new DanawaIntegrationError(

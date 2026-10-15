@@ -11,16 +11,32 @@ function response() {
 describe("products API", () => {
   it("returns the database catalog as JSON", async () => {
     const res = response();
-    await createProductsHandler(async () => [])(
-      { method: "GET" } as IncomingMessage,
-      res as unknown as ServerResponse
-    );
+    await createProductsHandler(async () => ({
+      products: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+      summaries: [],
+    }))({ method: "GET" } as IncomingMessage, res as unknown as ServerResponse);
     expect(res.writeHead).toHaveBeenCalledWith(200);
     expect(res.setHeader).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(JSON.parse(res.end.mock.calls[0][0])).toMatchObject({
       products: [],
       source: "DANAWA",
     });
+  });
+  it("rejects an invalid page before reading the database", async () => {
+    const read = vi.fn();
+    const res = response();
+    await createProductsHandler(read)(
+      {
+        method: "GET",
+        url: "/api/products?view=rankings&page=-1",
+      } as IncomingMessage,
+      res as unknown as ServerResponse
+    );
+    expect(res.writeHead).toHaveBeenCalledWith(400);
+    expect(read).not.toHaveBeenCalled();
   });
   it("rejects writes before accessing the database", async () => {
     const read = vi.fn();

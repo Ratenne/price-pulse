@@ -8,13 +8,10 @@ import {
   VISIBLE_PRODUCT_CATEGORIES,
   type ProductCategory,
 } from "@/domain/category";
-import { useAppContext } from "@/contexts/AppContext";
-import { sortProducts, type ProductSort } from "@/services/productService";
-import {
-  calculatePagination,
-  getPageNumbers,
-  getPaginatedItems,
-} from "@/lib/pagination";
+import { type ProductSort } from "@/services/productService";
+import { useProductPage } from "@/hooks/useProductPage";
+import { ProductLoadState } from "@/components/ProductLoadState";
+import { calculatePagination, getPageNumbers } from "@/lib/pagination";
 import { ChevronLeft, ChevronRight, Search, SearchX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -46,7 +43,6 @@ function getInitialState() {
 }
 
 export default function RankingsPage() {
-  const { products } = useAppContext();
   const initial = useMemo(getInitialState, []);
   const [category, setCategory] = useState<ProductCategory | "ALL">(
     initial.category
@@ -57,32 +53,26 @@ export default function RankingsPage() {
     () => new URLSearchParams(window.location.search).get("q") || ""
   );
 
-  const sortedProducts = useMemo(() => {
-    const filtered =
-      category === "ALL"
-        ? products
-        : products.filter(product => product.category === category);
-    const normalized = query.trim().toLocaleLowerCase();
-    return sortProducts(
-      filtered.filter(product =>
-        `${product.manufacturer} ${product.modelName} ${product.displayName} ${product.tags.join(" ")}`
-          .toLocaleLowerCase()
-          .includes(normalized)
-      ),
-      sort
-    );
-  }, [category, products, query, sort]);
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const request = new URLSearchParams({
+    view: "rankings",
+    sort,
+    page: String(currentPage),
+    q: debouncedQuery,
+  });
+  if (category !== "ALL") request.set("category", category);
+  const state = useProductPage(request.toString());
 
   const pagination = calculatePagination(
-    sortedProducts.length,
+    state.data.total,
     ITEMS_PER_PAGE,
     currentPage
   );
-  const pageProducts = getPaginatedItems(
-    sortedProducts,
-    pagination.currentPage,
-    ITEMS_PER_PAGE
-  );
+  const pageProducts = state.data.products;
   const pageNumbers = getPageNumbers(
     pagination.currentPage,
     pagination.totalPages,
@@ -90,23 +80,23 @@ export default function RankingsPage() {
   );
 
   useEffect(() => {
-    if (currentPage !== pagination.currentPage) {
-      setCurrentPage(pagination.currentPage);
+    if (!state.loading && !state.error && currentPage !== state.data.page) {
+      setCurrentPage(state.data.page);
     }
-  }, [currentPage, pagination.currentPage]);
+  }, [currentPage, state.loading, state.error, state.data.page]);
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (category !== "ALL") params.set("category", category);
     if (query.trim()) params.set("q", query.trim());
     params.set("sort", sort);
-    params.set("page", String(pagination.currentPage));
+    params.set("page", String(currentPage));
     window.history.replaceState(
       null,
       "",
       `${window.location.pathname}?${params.toString()}`
     );
-  }, [category, pagination.currentPage, query, sort]);
+  }, [category, currentPage, query, sort]);
 
   const updateCategory = (nextCategory: ProductCategory | "ALL") => {
     setCategory(nextCategory);
@@ -189,15 +179,20 @@ export default function RankingsPage() {
               {category === "ALL" ? "전체 상품" : getCategoryLabel(category)}
             </h2>
             <span role="status" aria-live="polite">
-              총 {sortedProducts.length}개 상품
+              {state.loading ? "조회 중" : `총 ${state.data.total}개 상품`}
             </span>
           </div>
+          <ProductLoadState
+            loading={state.loading}
+            error={state.error}
+            retry={state.retry}
+          />
           {pageProducts.length ? (
             <ProductList
               products={pageProducts}
               offset={(pagination.currentPage - 1) * ITEMS_PER_PAGE}
             />
-          ) : (
+          ) : !state.loading && !state.error ? (
             <div className="empty-state">
               <SearchX size={32} aria-hidden="true" />
               <h2>검색 결과가 없습니다</h2>
@@ -213,7 +208,7 @@ export default function RankingsPage() {
                 검색 조건 초기화
               </button>
             </div>
-          )}
+          ) : null}
           <nav
             className="mt-10 flex flex-wrap items-center justify-center gap-2"
             aria-label="전체 순위 페이지"

@@ -1,5 +1,5 @@
 import type { Product } from "@/domain/product";
-import { formatPrice } from "@/lib/productFormatting";
+import { formatPrice, formatCurrentPrice } from "@/lib/productFormatting";
 import {
   CartesianGrid,
   Line,
@@ -48,7 +48,7 @@ export function PriceHistoryChart({
       <div
         style={{ height }}
         role="img"
-        aria-label={`${product.displayName} 가격 흐름 차트. 현재 가격 ${formatPrice(product.currentPrice)}`}
+        aria-label={`${product.displayName} 가격 흐름 차트. 현재 가격 ${formatCurrentPrice(product)}`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart

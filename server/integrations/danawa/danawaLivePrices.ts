@@ -44,3 +44,31 @@ export function readLivePrices(): Promise<LivePrices> {
   }
   return inFlight;
 }
+
+export async function readSelectedLivePrices(
+  products: { external_product_id: string; name: string }[],
+  list: Pick<DanawaProductListClient, "fetchPage"> = client,
+  signal?: AbortSignal
+): Promise<LivePrices> {
+  const prices = new Map<string, number>();
+  for (const product of products) {
+    signal?.throwIfAborted();
+    try {
+      const result = await list.fetchPage(
+        DANAWA_GPU_CATEGORY,
+        1,
+        product.name,
+        signal
+      );
+      const match = result.products.find(
+        p => p.externalProductId === product.external_product_id
+      );
+      if (match?.currentMinPrice !== undefined)
+        prices.set(product.external_product_id, match.currentMinPrice);
+    } catch {
+      signal?.throwIfAborted();
+      // A removed listing must not be substituted with a different search result.
+    }
+  }
+  return { prices, checkedAt: new Date().toISOString() };
+}

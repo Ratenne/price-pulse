@@ -3,13 +3,12 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { PriceRangeBar } from "@/components/PriceRangeBar";
 import { Eye, HandCoins, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
-import { getTopPriceRangeProducts } from "@/services/productService";
 import { formatPrice } from "@/lib/productFormatting";
-import { useAppContext } from "@/contexts/AppContext";
+import { useProductPage } from "@/hooks/useProductPage";
 
 export default function SafeTradePage() {
-  const { products } = useAppContext();
-  const example = getTopPriceRangeProducts(1, products)[0];
+  const state = useProductPage("view=guide");
+  const example = state.data.products[0];
   return (
     <div className="app-shell">
       <Header />
@@ -31,28 +30,30 @@ export default function SafeTradePage() {
                 상품 가격 살펴보기 <ArrowRight size={17} aria-hidden="true" />
               </Link>
             </div>
-            <div className="guide-visual">
-              <h2>{example.displayName}</h2>
-              <div className="guide-key">
-                <span>
-                  <Eye size={17} aria-hidden="true" />
-                  구매자
-                </span>
-                <span>같은 가격, 같은 기준</span>
-                <span>
-                  판매자
-                  <HandCoins size={17} aria-hidden="true" />
-                </span>
+            {example && (
+              <div className="guide-visual">
+                <h2>{example.displayName}</h2>
+                <div className="guide-key">
+                  <span>
+                    <Eye size={17} aria-hidden="true" />
+                    구매자
+                  </span>
+                  <span>같은 가격, 같은 기준</span>
+                  <span>
+                    판매자
+                    <HandCoins size={17} aria-hidden="true" />
+                  </span>
+                </div>
+                <PriceRangeBar product={example} />
+                <p>
+                  예시 적정 범위{" "}
+                  <strong className="text-[var(--text-primary)]">
+                    {formatPrice(example.fairPriceMin)} ~{" "}
+                    {formatPrice(example.fairPriceMax)}
+                  </strong>
+                </p>
               </div>
-              <PriceRangeBar product={example} />
-              <p>
-                예시 적정 범위{" "}
-                <strong className="text-[var(--text-primary)]">
-                  {formatPrice(example.fairPriceMin)} ~{" "}
-                  {formatPrice(example.fairPriceMax)}
-                </strong>
-              </p>
-            </div>
+            )}
           </div>
         </section>
         <section className="container discovery-section">
