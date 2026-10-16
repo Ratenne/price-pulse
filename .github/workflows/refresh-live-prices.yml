@@ -1,0 +1,32 @@
+name: Refresh Live Prices
+
+on:
+  schedule:
+    - cron: "7 */3 * * *" # every 3 hours
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: danawa-live-price-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.34.4 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx server/scripts/refreshLivePrices.ts
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_SSL: "true"

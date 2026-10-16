@@ -19,7 +19,11 @@ describe("products API", () => {
       summaries: [],
     }))({ method: "GET" } as IncomingMessage, res as unknown as ServerResponse);
     expect(res.writeHead).toHaveBeenCalledWith(200);
-    expect(res.setHeader).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      expect.stringContaining("s-maxage=300")
+    );
+    expect(res.setHeader).not.toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(JSON.parse(res.end.mock.calls[0][0])).toMatchObject({
       products: [],
       source: "DANAWA",
@@ -59,6 +63,7 @@ describe("products API", () => {
         res as unknown as ServerResponse
       );
       expect(res.writeHead).toHaveBeenCalledWith(503);
+      expect(res.setHeader).toHaveBeenCalledWith("Cache-Control", "no-store");
       expect(res.end).toHaveBeenCalledWith(
         JSON.stringify({ error: "CATALOG_UNAVAILABLE" })
       );
