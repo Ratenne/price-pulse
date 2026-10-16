@@ -6,6 +6,11 @@ import {
   type ProductQuery,
 } from "../services/productPage.js";
 
+// Prices are a stored snapshot (refreshed every few hours), so the CDN can serve
+// repeat views from cache and refresh in the background.
+const CACHE_CONTROL =
+  "public, max-age=0, s-maxage=300, stale-while-revalidate=3600";
+
 export function createProductsHandler(
   read = (query: ProductQuery, signal?: AbortSignal) =>
     readProductPage(getDatabasePool(), query, new Date(), signal)
@@ -32,7 +37,7 @@ export function createProductsHandler(
       });
       const result = await read(query, controller.signal);
       if (res.destroyed) return;
-      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Cache-Control", CACHE_CONTROL);
       res
         .writeHead(200)
         .end(
