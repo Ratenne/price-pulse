@@ -4,44 +4,56 @@
 
 **프로젝트명:** PricePulse
 **작성일:** 2026-08-01
+**구현 현황 확인일:** 2026-10-19
 
 ---
 
 ## 프로젝트 개요
 
 ### 목적
-GPU·CPU·노트북의 6개월 가격 흐름을 비교하고, 현재 가격 위치와 적정 거래 범위를 구매자와 판매자 관점으로 설명하는 PC 가격 판단 데모 서비스입니다.
+
+GPU·CPU·노트북의 최근 완료된 6개월 가격 흐름을 비교하고, 현재 가격 위치와 적정 거래 범위를 구매자와 판매자 관점으로 설명하는 PC 가격 판단 웹 서비스입니다.
 
 ### 기술 스택
+
 - Frontend: React 19, TypeScript, Vite 7, Tailwind CSS 4
 - UI: Radix UI, Lucide React, Recharts, Framer Motion
 - Routing: Wouter
-- Backend/Serving: Express 4, Node.js
-- Data: 로컬 TypeScript mock 데이터와 도메인 계산 로직
-- Package Manager: pnpm
-- Quality: TypeScript strict mode, Prettier
-- Deployment Build: Vite 정적 번들 + esbuild Express 서버 번들
+- Backend/Serving: Express 4, Node.js 24(CI), Vercel Function (`api/products.ts`)
+- Data: Supabase PostgreSQL(`pg`), 다나와 월별 가격 이력과 현재가 스냅샷
+- Collection: TypeScript/tsx 배치, Cheerio, GitHub Actions 주기 실행
+- Package Manager: pnpm 10.34.4 (`package.json` 기준)
+- Quality: TypeScript strict mode, Vitest 3, Prettier, GitHub Actions CI
+- Deployment Build: Vite 정적 번들 + esbuild Express 서버·백필 스크립트 번들. Vercel은 정적 파일과 상품 API를 함께 제공
 
 ### 현재 구현 범위
+
 - 홈 대시보드와 인트로 영상
 - GPU·CPU·노트북 카테고리 탐색
 - 가격 변동폭·현재가·최저가 근접 기준 전체 순위
 - 상품별 6개월 가격 흐름과 적정 거래 범위
 - 구매자·판매자 관점의 가격 판단 메시지
 - 다크/라이트 테마, 반응형 UI, 404 처리
-- 28개 시연용 상품 데이터
+- `/api/products` 기반 화면별 조회·검색·DB 정렬·페이지네이션·카테고리 집계
+- 다나와 GPU 상품 대량 탐색·과거 이력 백필, 주간 월별 이력 갱신
+- 3시간 주기 현재가 스냅샷 갱신과 12시간 만료 처리
+- 검토된 이상 가격 제외와 차트의 제외 월 표시
 
 ### 데이터 및 운영 경계
-- 현재 가격 데이터는 시연용 로컬 mock 데이터입니다.
-- 외부 가격 수집 API, 사용자 계정, 결제, 실거래 기능은 구현되어 있지 않습니다.
+
+- 화면은 PostgreSQL 상품 API를 사용하며 `client/src/data/mockProducts.ts`를 실행 경로에서 가져오지 않습니다. API 장애 시 mock 데이터로 대체하지 않습니다.
+- 한국시간 기준 이번 달을 제외한 최근 6개월 월별 최저가를 분석합니다. 현재가는 DB 스냅샷이며 화면 요청 중 다나와를 호출하지 않습니다.
+- 월별 이력 갱신은 월요일 06:17(KST), 현재가 갱신은 3시간마다 실행하도록 설정되어 있습니다. workflow 설정만으로 실제 실행 성공이나 운영 DB 적용을 단정하지 않습니다.
+- UI의 GPU·CPU·노트북 지원과 별개로 현재 다나와 목록 수집은 GPU 대상입니다. 상품 건수는 DB에 따라 달라집니다.
+- `003`의 검토 뷰와 `004`의 스냅샷 컬럼이 API에 필요합니다. `006`은 G210 특정 월/가격의 검토 제외 SQL입니다. 적용 여부는 운영 DB에서 별도로 확인합니다.
+- `005_price_collection.sql`의 `pc_*` 스키마는 현재 API·배치와 미연결입니다. 로컬 미추적 SQL은 배포 완료 기능으로 취급하지 않습니다.
+- 사용자 계정, 결제, 실거래 기능은 구현되어 있지 않습니다.
 - 시크릿과 환경변수 원문은 문서나 Task에 기록하지 않습니다.
 
 ### AI-SYSTEM 참조
-- 설치본 위치: `/Users/sulimlee/ai-kit-workspace/ai-system`
-- 운영 계약: `/Users/sulimlee/ai-kit-workspace/ai-system/AGENTS.md`
-- 전체 워크플로우: `/Users/sulimlee/ai-kit-workspace/ai-system/OPERATION.md`
-- Phase 흐름: `/Users/sulimlee/ai-kit-workspace/ai-system/AGENT_FLOW.md`
-- 상세 가이드: `/Users/sulimlee/ai-kit-workspace/ai-system/playbook/`
+
+- 아래 AI-SYSTEM 워크플로우는 기존 도구 통합 참고입니다. 외부 설치 경로와 Command·Agent·Skill의 사용 가능 여부는 현재 환경에서 확인해야 합니다.
+- 현재 실행 명령은 `package.json`, 배포 설정은 `vercel.json`과 `.github/workflows/`, 제품 현황은 `PRODUCT.md`를 우선 확인합니다.
 
 ---
 
@@ -54,13 +66,17 @@ price-pulse-demo/
 │   └── src/
 │       ├── components/  # 화면 및 UI 컴포넌트
 │       ├── contexts/    # 앱/테마 전역 상태
-│       ├── data/        # 시연용 상품 데이터
+│       ├── data/        # 기존 mock 데이터 (현재 화면 조회에는 사용하지 않음)
 │       ├── domain/      # 상품·카테고리 타입
 │       ├── lib/         # 가격 표현·페이지네이션·캔버스 로직
 │       ├── pages/       # 홈·순위·카테고리·상세·안심거래
-│       └── services/    # 상품 조회·정렬·요약 로직
-├── server/              # 프로덕션 정적 파일 제공 서버
-├── shared/              # 공용 상수
+│       ├── hooks/       # 화면별 상품 API 조회
+│       └── services/    # 상품 조회·정렬 유틸리티
+├── api/                 # Vercel 상품 API 진입점
+├── server/              # Express, 상품 API, DB 저장소, 다나와 수집·배치
+├── database/            # PostgreSQL 스키마·가격 검토 SQL
+├── shared/              # 공용 API 타입·가격 차트 로직·상수
+├── .github/workflows/   # CI, 수동 배포, 주간 이력·3시간 현재가 갱신
 ├── tasks/               # 완료 및 후속 Task 목록
 ├── .claude/             # AI-SYSTEM Claude Code 설정
 ├── package.json
