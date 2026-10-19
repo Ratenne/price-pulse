@@ -10,6 +10,7 @@ import type { Logger } from "../logging/logger";
 import type { PriceHistoryRepository } from "../repositories/priceHistoryRepository";
 import type { ProductRepository } from "../repositories/productRepository";
 import { koreaYearMonth } from "../domain/priceCalendar";
+import { DanawaIntegrationError } from "../integrations/danawa/danawaErrors";
 
 export interface DanawaBulkBackfillProgress {
   currentPage: number;
@@ -106,6 +107,10 @@ export class DanawaBulkBackfillService {
         this.logger.error("Danawa product discovery page failed", {
           currentPage: page,
           exceptionType: error instanceof Error ? error.name : typeof error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          ...(error instanceof DanawaIntegrationError
+            ? { failureStage: error.stage, httpStatus: error.status }
+            : {}),
         });
         page += 1;
         continue;
@@ -167,6 +172,15 @@ export class DanawaBulkBackfillService {
         source: PRICE_SOURCE.DANAWA,
         externalProductId: product.externalProductId,
         exceptionType: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        ...(error instanceof DanawaIntegrationError
+          ? {
+              failureStage: error.stage,
+              httpStatus: error.status,
+              causeType:
+                error.cause instanceof Error ? error.cause.name : undefined,
+            }
+          : {}),
       });
       return;
     }
@@ -176,6 +190,14 @@ export class DanawaBulkBackfillService {
     );
     if (!completed.length) {
       progress.failedProducts += 1;
+      this.logger.warn("Danawa product has no completed historical prices", {
+        source: PRICE_SOURCE.DANAWA,
+        externalProductId: product.externalProductId,
+        reason: "NO_COMPLETED_MONTHLY_PRICES",
+        collectedPrices: collection.prices.length,
+        invalidPrices: collection.invalidCount,
+        currentMonth,
+      });
       return;
     }
     const writeResult = await this.priceHistories.saveMonthlyPrices(
