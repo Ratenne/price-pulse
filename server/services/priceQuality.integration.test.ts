@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDatabasePool, getDatabasePool } from "../config/database";
 import { parseProductQuery, readProductPage } from "./productPage";
+import { buildPriceChartData } from "../../shared/priceChart";
 
 // Opt-in PostgreSQL verification. All DDL and rows are transaction-local TEMP
 // objects, shadowing real tables. No production rows or views are modified.
@@ -130,6 +131,96 @@ describe.skipIf(process.env.PRICEPULSE_DB_TESTS !== "true")(
         );
       } finally {
         await client.query("ROLLBACK TO SAVEPOINT all_excluded");
+      }
+    });
+    it("quarantines only the reviewed G210 September value and restores a source correction", async () => {
+      await client.query("SAVEPOINT g210_review");
+      try {
+        await client.query(`
+          INSERT INTO products (id,name,category) VALUES
+            ('danawa-36709025','AFOX G210','GPU');
+          INSERT INTO product_source_mappings (product_id,source,external_product_id,source_url) VALUES
+            ('danawa-36709025','DANAWA','36709025','https://prod.danawa.com/info/?pcode=36709025');
+          INSERT INTO price_histories (product_id,source,price,price_year_month,granularity,source_type) VALUES
+            ('danawa-36709025','DANAWA',22260,'2026-04-01','MONTH','HISTORICAL_IMPORT'),
+            ('danawa-36709025','DANAWA',22250,'2026-05-01','MONTH','HISTORICAL_IMPORT'),
+            ('danawa-36709025','DANAWA',22920,'2026-06-01','MONTH','HISTORICAL_IMPORT'),
+            ('danawa-36709025','DANAWA',22290,'2026-07-01','MONTH','HISTORICAL_IMPORT'),
+            ('danawa-36709025','DANAWA',23210,'2026-08-01','MONTH','HISTORICAL_IMPORT'),
+            ('danawa-36709025','DANAWA',225000,'2026-09-01','MONTH','HISTORICAL_IMPORT');
+        `);
+        const review = readFileSync(
+          new URL(
+            "../../database/006_review_g210_september_price.sql",
+            import.meta.url
+          ),
+          "utf8"
+        ).replace(/^\s*(BEGIN|COMMIT);/gm, "");
+        await client.query(review);
+        await client.query(review);
+        const detail = await readProductPage(
+          client as unknown as Pool,
+          parseProductQuery("/?view=detail&id=danawa-36709025"),
+          new Date("2026-10-19T00:00:00Z")
+        );
+        if (!("products" in detail)) throw new Error("Expected detail");
+        const product = detail.products[0];
+        expect(product).toMatchObject({
+          sixMonthLowPrice: 22250,
+          sixMonthHighPrice: 23210,
+          sixMonthAveragePrice: 22586,
+          priceRangeAmount: 960,
+          previousPrice: 23210,
+          latestHistoryMonth: "2026-08",
+          fairPriceMin: 23000,
+          fairPriceMax: 23000,
+          excludedHistoryMonths: ["2026-09"],
+        });
+        expect(product.priceRangeRate).toBeCloseTo(4.3146, 4);
+        expect(product.priceHistory).toHaveLength(5);
+        expect(buildPriceChartData(product).at(-1)).toEqual({
+          date: "2026-09",
+          price: null,
+        });
+        expect(
+          (
+            await client.query(
+              "SELECT price::int FROM price_histories WHERE product_id='danawa-36709025' AND price_year_month='2026-09-01'"
+            )
+          ).rows
+        ).toEqual([{ price: 225000 }]);
+        expect(
+          (
+            await client.query(
+              "SELECT count(*)::int n FROM price_history_exclusions e JOIN price_histories h ON h.id=e.price_history_id WHERE h.product_id='danawa-36709025'"
+            )
+          ).rows[0].n
+        ).toBe(1);
+        // Simulate a corrected source value, not an inferred replacement.
+        await client.query(
+          "UPDATE price_histories SET price=23400 WHERE product_id='danawa-36709025' AND price_year_month='2026-09-01'"
+        );
+        await client.query(review);
+        expect(
+          (
+            await client.query(
+              "SELECT price::int FROM price_histories_for_analysis WHERE product_id='danawa-36709025' AND price_year_month='2026-09-01'"
+            )
+          ).rows
+        ).toEqual([{ price: 23400 }]);
+        // An equal price for a different product must remain usable.
+        await client.query(
+          "UPDATE price_histories SET price=225000 WHERE product_id='danawa-control' AND price_year_month='2026-09-01'"
+        );
+        expect(
+          (
+            await client.query(
+              "SELECT price::int FROM price_histories_for_analysis WHERE product_id='danawa-control' AND price_year_month='2026-09-01'"
+            )
+          ).rows
+        ).toEqual([{ price: 225000 }]);
+      } finally {
+        await client.query("ROLLBACK TO SAVEPOINT g210_review");
       }
     });
     it("supports reversing a review without altering the source history", async () => {
