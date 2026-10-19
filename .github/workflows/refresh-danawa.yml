@@ -2,7 +2,7 @@ name: Refresh Danawa Prices
 
 on:
   schedule:
-    - cron: "17 21 * * 0" # Monday 06:17 Asia/Seoul
+    - cron: "7 */3 * * *" #Runs at 7 minutes past the hour, every 3 hours
   workflow_dispatch:
 
 permissions:
