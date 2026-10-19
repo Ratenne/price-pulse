@@ -195,6 +195,8 @@ export class DanawaBulkBackfillService {
         externalProductId: product.externalProductId,
         reason: "NO_COMPLETED_MONTHLY_PRICES",
         collectedPrices: collection.prices.length,
+        collectedYearMonths: collection.prices.map(price => price.priceYearMonth),
+        selectedPeriod: collection.selectedPeriod,
         invalidPrices: collection.invalidCount,
         currentMonth,
       });
