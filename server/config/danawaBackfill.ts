@@ -68,7 +68,8 @@ export function createDanawaBulkBackfillConfig(
     ),
     batchSize: positiveInteger(env.DANAWA_BATCH_SIZE, 30, "DANAWA_BATCH_SIZE"),
     listCount: positiveInteger(env.DANAWA_LIST_COUNT, 30, "DANAWA_LIST_COUNT"),
-    targetHistoricalRowCount: positiveInteger(
+    // Zero scans the entire category on scheduled runs, regardless of DB size.
+    targetHistoricalRowCount: nonNegativeInteger(
       env.DANAWA_TARGET_PRICE_COUNT,
       10_000,
       "DANAWA_TARGET_PRICE_COUNT"

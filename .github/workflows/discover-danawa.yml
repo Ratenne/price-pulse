@@ -1,0 +1,36 @@
+name: Discover Danawa Products
+
+on:
+  schedule:
+    - cron: "17 21 * * 1" # Tuesday 06:17 Asia/Seoul
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: danawa-product-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.34.4 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx server/scripts/bulkBackfillDanawa.ts
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_SSL: "true"
+          DANAWA_REQUEST_DELAY_MS: "1000"
+          DANAWA_MAX_CONCURRENCY: "1"
+          DANAWA_LIST_COUNT: "100"
+          DANAWA_TARGET_PRICE_COUNT: "0" # Scan all pages, regardless of DB size.

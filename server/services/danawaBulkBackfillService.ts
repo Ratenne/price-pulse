@@ -9,6 +9,7 @@ import type { DanawaProductListClient } from "../integrations/danawa/danawaProdu
 import type { Logger } from "../logging/logger";
 import type { PriceHistoryRepository } from "../repositories/priceHistoryRepository";
 import type { ProductRepository } from "../repositories/productRepository";
+import { koreaYearMonth } from "../domain/priceCalendar";
 
 export interface DanawaBulkBackfillProgress {
   currentPage: number;
@@ -59,8 +60,10 @@ export class DanawaBulkBackfillService {
   ) {}
 
   async run(
-    category: DanawaCategoryMapping
+    category: DanawaCategoryMapping,
+    now = new Date()
   ): Promise<DanawaBulkBackfillProgress> {
+    const currentMonth = koreaYearMonth(now);
     const seenProductCodes = new Set<string>();
     const progress: DanawaBulkBackfillProgress = {
       currentPage: 0,
@@ -82,6 +85,7 @@ export class DanawaBulkBackfillService {
       targetReached: false,
     };
     progress.targetReached =
+      progress.targetHistoricalRowCount > 0 &&
       progress.currentHistoricalRowCount >= progress.targetHistoricalRowCount;
     if (progress.targetReached) {
       this.logger.info("Danawa bulk backfill target already reached", {
@@ -128,13 +132,14 @@ export class DanawaBulkBackfillService {
         await processWithConcurrency(
           batch,
           this.config.maxConcurrency,
-          product => this.processProduct(product, progress)
+          product => this.processProduct(product, progress, currentMonth)
         );
       }
 
       progress.currentHistoricalRowCount =
         await this.priceHistories.countValidDanawaHistoricalPrices();
       progress.targetReached =
+        progress.targetHistoricalRowCount > 0 &&
         progress.currentHistoricalRowCount >= progress.targetHistoricalRowCount;
       this.logger.info("Danawa bulk backfill page completed", { ...progress });
       if (progress.targetReached) break;
@@ -146,7 +151,8 @@ export class DanawaBulkBackfillService {
 
   private async processProduct(
     product: DiscoveredProduct,
-    progress: DanawaBulkBackfillProgress
+    progress: DanawaBulkBackfillProgress,
+    currentMonth: string
   ): Promise<void> {
     const upsert = await this.products.upsertDanawaProduct(product);
     if (upsert.inserted) progress.insertedProducts += 1;
@@ -165,10 +171,17 @@ export class DanawaBulkBackfillService {
       return;
     }
 
+    const completed = collection.prices.filter(
+      price => price.priceYearMonth < currentMonth
+    );
+    if (!completed.length) {
+      progress.failedProducts += 1;
+      return;
+    }
     const writeResult = await this.priceHistories.saveMonthlyPrices(
       upsert.productId,
       PRICE_SOURCE.DANAWA,
-      collection.prices
+      completed
     );
     progress.successfulProducts += 1;
     progress.insertedPrices += writeResult.insertedCount;

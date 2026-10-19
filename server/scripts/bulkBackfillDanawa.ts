@@ -34,7 +34,13 @@ async function main(): Promise<void> {
   console.log(
     JSON.stringify({ message: "Danawa bulk backfill completed", summary })
   );
-  if (!summary.targetReached) process.exitCode = 2;
+  if (
+    summary.failedPages > 0 ||
+    summary.failedProducts > 0 ||
+    (config.targetHistoricalRowCount > 0 && !summary.targetReached) ||
+    (config.targetHistoricalRowCount === 0 && summary.successfulProducts === 0)
+  )
+    process.exitCode = 2;
 }
 
 main()

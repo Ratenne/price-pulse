@@ -18,6 +18,79 @@ const config: DanawaBulkBackfillConfig = {
 };
 
 describe("DanawaBulkBackfillService", () => {
+  it("scans every page above the DB target in unlimited mode and saves only completed Korean months", async () => {
+    const productList = {
+      fetchPage: vi.fn(async (_category, page: number) => ({
+        page,
+        totalProductCount: 2,
+        totalPages: 2,
+        products: [
+          {
+            externalProductId: String(page),
+            name: `GPU ${page}`,
+            category: "PC 주요 부품_그래픽카드",
+            sourceUrl: `https://prod.danawa.com/info/?pcode=${page}`,
+          },
+        ],
+      })),
+    };
+    const products: ProductRepository = {
+      upsertDanawaProduct: vi.fn(async product => ({
+        productId: `danawa-${product.externalProductId}`,
+        inserted: false,
+      })),
+    };
+    const collector = {
+      collect: vi.fn(async () => ({
+        prices: ["2026-09", "2026-10", "2026-11"].map(priceYearMonth => ({
+          price: 100,
+          priceYearMonth,
+          granularity: "MONTH" as const,
+          sourceType: "HISTORICAL_IMPORT" as const,
+        })),
+        receivedCount: 3,
+        invalidCount: 0,
+        selectedPeriod: 24 as const,
+      })),
+    };
+    const priceHistories: PriceHistoryRepository = {
+      countValidDanawaHistoricalPrices: vi.fn(async () => 20_000),
+      saveMonthlyPrices: vi.fn(async () => ({
+        insertedCount: 0,
+        updatedCount: 0,
+        skippedCount: 1,
+      })),
+    };
+    const logger: Logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const result = await new DanawaBulkBackfillService(
+      productList,
+      products,
+      collector,
+      priceHistories,
+      logger,
+      { ...config, targetHistoricalRowCount: 0 }
+    ).run(DANAWA_GPU_CATEGORY, new Date("2026-09-30T15:00:00Z"));
+
+    expect(productList.fetchPage).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      successfulProducts: 2,
+      targetReached: false,
+    });
+    expect(priceHistories.saveMonthlyPrices).toHaveBeenNthCalledWith(
+      1,
+      "danawa-1",
+      "DANAWA",
+      [
+        {
+          price: 100,
+          priceYearMonth: "2026-09",
+          granularity: "MONTH",
+          sourceType: "HISTORICAL_IMPORT",
+        },
+      ]
+    );
+  });
+
   it("returns before product discovery when the database target is already met", async () => {
     const productList = { fetchPage: vi.fn() };
     const products = { upsertDanawaProduct: vi.fn() };

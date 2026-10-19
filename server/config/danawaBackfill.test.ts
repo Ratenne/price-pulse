@@ -19,4 +19,14 @@ describe("createDanawaBulkBackfillConfig", () => {
       createDanawaBulkBackfillConfig({ DANAWA_MAX_CONCURRENCY: "6" })
     ).toThrow("cannot exceed 5");
   });
+
+  it("allows an unlimited scheduled scan but rejects negative targets", () => {
+    expect(
+      createDanawaBulkBackfillConfig({ DANAWA_TARGET_PRICE_COUNT: "0" })
+        .targetHistoricalRowCount
+    ).toBe(0);
+    expect(() =>
+      createDanawaBulkBackfillConfig({ DANAWA_TARGET_PRICE_COUNT: "-1" })
+    ).toThrow("must be a non-negative integer");
+  });
 });
