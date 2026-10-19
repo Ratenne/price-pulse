@@ -87,6 +87,28 @@ function parsePeriodRows(
   };
 }
 
+function describePeriod(response: Record<string, unknown>, key: "24" | "12" | "6") {
+  const exists = Object.prototype.hasOwnProperty.call(response, key);
+  const period = response[key];
+  const result = isRecord(period) ? period.result : undefined;
+  return {
+    period: key,
+    exists,
+    periodType: period === null ? "null" : Array.isArray(period) ? "array" : typeof period,
+    resultType: result === null ? "null" : Array.isArray(result) ? "array" : typeof result,
+    resultCount: Array.isArray(result) ? result.length : undefined,
+    resultRowTypes: Array.isArray(result)
+      ? [...new Set(result.map(row => row === null ? "null" : Array.isArray(row) ? "array" : typeof row))]
+      : undefined,
+    resultFieldTypes: Array.isArray(result)
+      ? {
+          date: [...new Set(result.filter(isRecord).map(row => row.date === null ? "null" : typeof row.date))],
+          minPrice: [...new Set(result.filter(isRecord).map(row => row.minPrice === null ? "null" : typeof row.minPrice))],
+        }
+      : undefined,
+  };
+}
+
 export function parseDanawaMonthlyPrices(
   response: unknown,
   logger: Pick<Logger, "warn">
@@ -114,6 +136,12 @@ export function parseDanawaMonthlyPrices(
       };
     }
   }
+
+  logger.warn("Danawa historical response has no valid monthly period", {
+    responseKeys: Object.keys(typedResponse).slice(0, 30),
+    periods: (["24", "12", "6"] as const).map(key => describePeriod(typedResponse, key)),
+    invalidRows: invalidCount,
+  });
 
   throw new DanawaIntegrationError(
     "Danawa response contained no valid monthly 24, 12, or 6 period",
