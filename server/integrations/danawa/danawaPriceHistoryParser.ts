@@ -87,6 +87,34 @@ function parsePeriodRows(
   };
 }
 
+function describeShape(value: unknown, depth = 0): unknown {
+  if (value === null) return { type: "null" };
+  if (Array.isArray(value)) {
+    return {
+      type: "array",
+      length: value.length,
+      firstItemShape: depth < 3 && value.length > 0
+        ? describeShape(value[0], depth + 1)
+        : undefined,
+    };
+  }
+  if (isRecord(value)) {
+    return {
+      type: "object",
+      fields: Object.fromEntries(
+        Object.entries(value).slice(0, 40).map(([key, child]) => [
+          key,
+          depth < 3 ? describeShape(child, depth + 1) : {
+            type: Array.isArray(child) ? "array" : child === null ? "null" : typeof child,
+          },
+        ])
+      ),
+      fieldCount: Object.keys(value).length,
+    };
+  }
+  return { type: typeof value };
+}
+
 function describePeriod(response: Record<string, unknown>, key: "24" | "12" | "6") {
   const exists = Object.prototype.hasOwnProperty.call(response, key);
   const period = response[key];
@@ -139,6 +167,7 @@ export function parseDanawaMonthlyPrices(
 
   logger.warn("Danawa historical response has no valid monthly period", {
     responseKeys: Object.keys(typedResponse).slice(0, 30),
+    responseStructure: describeShape(typedResponse),
     periods: (["24", "12", "6"] as const).map(key => describePeriod(typedResponse, key)),
     invalidRows: invalidCount,
   });
