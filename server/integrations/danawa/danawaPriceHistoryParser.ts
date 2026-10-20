@@ -115,7 +115,8 @@ function describeShape(value: unknown, depth = 0): unknown {
   return { type: typeof value };
 }
 
-function describePeriod(response: Record<string, unknown>, key: "24" | "12" | "6") {
+function describePeriod(response: unknown, key: "24" | "12" | "6") {
+  if (!isRecord(response)) return { period: key, exists: false, periodType: typeof response };
   const exists = Object.prototype.hasOwnProperty.call(response, key);
   const period = response[key];
   const result = isRecord(period) ? period.result : undefined;
@@ -126,12 +127,12 @@ function describePeriod(response: Record<string, unknown>, key: "24" | "12" | "6
     resultType: result === null ? "null" : Array.isArray(result) ? "array" : typeof result,
     resultCount: Array.isArray(result) ? result.length : undefined,
     resultRowTypes: Array.isArray(result)
-      ? [...new Set(result.map(row => row === null ? "null" : Array.isArray(row) ? "array" : typeof row))]
+      ? Array.from(new Set(result.map(row => row === null ? "null" : Array.isArray(row) ? "array" : typeof row)))
       : undefined,
     resultFieldTypes: Array.isArray(result)
       ? {
-          date: [...new Set(result.filter(isRecord).map(row => row.date === null ? "null" : typeof row.date))],
-          minPrice: [...new Set(result.filter(isRecord).map(row => row.minPrice === null ? "null" : typeof row.minPrice))],
+          date: Array.from(new Set(result.filter(isRecord).map(row => row.date === null ? "null" : typeof row.date))),
+          minPrice: Array.from(new Set(result.filter(isRecord).map(row => row.minPrice === null ? "null" : typeof row.minPrice))),
         }
       : undefined,
   };
