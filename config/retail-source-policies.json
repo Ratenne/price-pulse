@@ -1,0 +1,17 @@
+{
+  "COUPANG": {
+    "approvalStatus": "pending"
+  },
+  "11ST": {
+    "approvalStatus": "pending"
+  },
+  "GMARKET": {
+    "approvalStatus": "pending"
+  },
+  "AUCTION": {
+    "approvalStatus": "pending"
+  },
+  "NAVER": {
+    "approvalStatus": "pending"
+  }
+}

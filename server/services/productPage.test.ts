@@ -39,6 +39,57 @@ function pool(query: ReturnType<typeof vi.fn>) {
 }
 beforeEach(() => vi.clearAllMocks());
 describe("page-scoped product queries", () => {
+  it("preserves stored retailer offers and Danawa fallback while retail collection is disabled", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    try {
+      for (const source of ["11ST", "DANAWA"] as const) {
+        const url =
+          source === "11ST"
+            ? "https://www.11st.co.kr/products/1"
+            : row.source_url;
+        const offers = [
+          {
+            source,
+            url,
+            price: 105,
+            shippingFee: source === "11ST" ? 5 : null,
+            checkedAt,
+          },
+        ];
+        const query = vi
+          .fn()
+          .mockResolvedValueOnce({ rows: [summary] })
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                ...row,
+                current_price_source: source,
+                current_price_url: url,
+                offers,
+              },
+            ],
+          });
+        const result = await readProductPage(
+          pool(query),
+          parseProductQuery("/?view=rankings"),
+          now
+        );
+        expect("products" in result && result.products[0]).toMatchObject({
+          currentPrice: 105,
+          currentPriceCheckedAt: checkedAt,
+          currentPriceSource: source,
+          currentPriceUrl: url,
+          offers,
+        });
+        expect(query.mock.calls[1][0]).toContain(
+          "LEFT JOIN product_current_prices"
+        );
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
   it("validates category, bounded pagination, and live ID limits", () => {
     expect(
       parseProductQuery("/?view=rankings&page=2&category=GPU")

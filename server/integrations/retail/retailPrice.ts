@@ -108,3 +108,95 @@ export function validateObservation(
     throw new Error("EXCLUDED_PURCHASE_CONDITION");
   return v;
 }
+
+// Normalized provider contract: reuse observation and link fields; missing
+// provider data stays absent. Persistence still requires a complete observation.
+export const collectionSchema = z
+  .object({
+    ...observationSchema.partial().shape,
+    source: linkSchema.shape.source,
+    url: z.string().url(),
+    externalProductId: z.string().trim().min(1),
+    manufacturer: z.string().trim().min(1).optional(),
+    model: z.string().trim().min(1).optional(),
+    method: z.enum(["API", "IMPORT"]),
+    dataSource: z.string().trim().min(1),
+  })
+  .strict();
+export type RetailCollection = z.infer<typeof collectionSchema>;
+export function collectionObservation(
+  link: RetailLink,
+  input: RetailCollection
+) {
+  input = collectionSchema.parse(input);
+  if (
+    input.source !== link.source ||
+    input.url !== link.url ||
+    !input.externalProductId?.trim() ||
+    !input.dataSource?.trim()
+  )
+    throw new Error("INVALID_COLLECTION_PROVENANCE");
+  const {
+    source,
+    url,
+    externalProductId,
+    manufacturer,
+    model,
+    method,
+    dataSource,
+    ...observation
+  } = input;
+  return validateObservation(link, observation);
+}
+
+// Phase 2 also records explicit stock-out observations. Unknown amounts stay NULL.
+export type RetailStoredObservation = Omit<
+  RetailObservation,
+  "availability" | "itemPrice" | "shippingFee"
+> & {
+  availability: "IN_STOCK" | "OUT_OF_STOCK";
+  itemPrice: number | null;
+  shippingFee: number | null;
+};
+const storedObservationSchema = z
+  .object({
+    ...observationSchema.shape,
+    availability: z.enum(["IN_STOCK", "OUT_OF_STOCK"]),
+    itemPrice: money.refine(v => v > 0).nullable(),
+    shippingFee: money.nullable(),
+  })
+  .strict()
+  .refine(
+    v =>
+      v.availability === "OUT_OF_STOCK" ||
+      (v.itemPrice !== null && v.shippingFee !== null)
+  )
+  .refine(
+    v =>
+      v.itemPrice === null ||
+      v.shippingFee === null ||
+      v.itemPrice + v.shippingFee <= 2_000_000_000
+  );
+export function validateStoredRetailObservation(
+  link: RetailLink,
+  input: unknown,
+  now = new Date()
+): RetailStoredObservation {
+  const v = storedObservationSchema.parse(input);
+  if (v.availability === "IN_STOCK") return validateObservation(link, v, now);
+  const age = now.getTime() - Date.parse(v.observedAt);
+  if (
+    v.listingId !== link.id ||
+    normalizeName(v.title) !== normalizeName(link.listingName)
+  )
+    throw new Error("MODEL_OR_VARIANT_MISMATCH");
+  if (age < -60_000 || age >= 12 * 3_600_000)
+    throw new Error("STALE_OR_FUTURE_OBSERVATION");
+  if (
+    /중고|리퍼|벌크|해외|직구|렌탈|대여|할부|쿠폰|회원|카드|used|refurb|renewed|coupon|membership/i.test(
+      v.title
+    )
+  )
+    throw new Error("EXCLUDED_PURCHASE_CONDITION");
+  return v;
+}
