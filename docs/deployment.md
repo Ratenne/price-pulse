@@ -65,3 +65,13 @@ Vercel Git Integration에서 Pull Request Preview Deployment를 활성화합니�
 [소매 API 계약 문서](retail-api-contracts.md)를 따른다. 현재 네 판매처의 실수집
 어댑터는 미지원이며, 키 설정만으로 수집하거나 기존 소매 workflow를 다시
 활성화하지 않는다. 인증정보는 Vercel 클라이언트 빌드용 `VITE_*` 변수에 넣지 않는다.
+
+네이버 CRAWL의 대상·권한·실행 제한과 미지원 Parser 범위는
+[네이버 수집 문서](naver-collection.md)를 따른다. `RETAIL_NAVER_ENABLED`만으로
+수집할 수 없으며, 승인과 실제 Parser 검증 전에는 스케줄을 연결하지 않는다.
+
+Phase 4.2 조회 코드는 `product_current_prices`의 신규 비교 기준 컬럼을 읽는다.
+배포 전 `010_retail_product_identity.sql` 이후 `011_retail_comparison_prices.sql`을
+검토된 DB에 먼저 적용해야 한다. 기존 금액·배송비·시각의 backfill은 없다.
+후보 정규화와 검증된 관측 승격은 [Discovery 문서](naver-discovery.md)를 따른다.
+소스 이용 승인과 서버 검증 파일은 별도이며 현재 기본값으로는 저장·실수집이 비활성이다.

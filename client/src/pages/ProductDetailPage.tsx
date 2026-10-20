@@ -7,6 +7,7 @@ import { getCategoryLabel } from "@/domain/category";
 import {
   formatPrice,
   formatCurrentPrice,
+  formatCurrentPriceBasis,
   getBuyerPerspective,
   getSellerPerspective,
   PRICE_STATUS_LABELS,
@@ -86,10 +87,7 @@ export default function ProductDetailPage({ id }: { id: string }) {
                 {product.modelName}
               </h1>
               <p className="mt-6 text-sm text-[var(--text-secondary)]">
-                {product.currentPriceSource &&
-                product.currentPriceSource !== "DANAWA"
-                  ? "배송비 포함 최저가"
-                  : "현재 가격 · 다나와 참고가"}
+                {formatCurrentPriceBasis(product)}
               </p>
               <p className="mt-1 text-3xl font-extrabold text-[var(--text-primary)]">
                 {formatCurrentPrice(product)}
@@ -98,14 +96,15 @@ export default function ProductDetailPage({ id }: { id: string }) {
                 <div className="mt-5 overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <caption className="mb-2 text-left text-xs text-[var(--text-muted)]">
-                      수집에 성공한 판매처만 표시합니다. 일반 국내 배송 기준이며
-                      도서산간 추가 비용은 다를 수 있습니다. 다나와는 배송비
-                      미확인 참고가로, 배송비 포함 최저가 계산에서 제외합니다.
+                      검증된 판매처 관측을 비교합니다. 배송비 확인 시 상품가와
+                      일반 배송비를 합산하고, 미확인 시 표시가격을 사용합니다.
+                      배송비 미확인은 무료배송이 아닙니다. 다나와는 판매처
+                      관측이 없을 때 사용하는 참고가입니다.
                     </caption>
                     <thead>
                       <tr>
                         <th className="py-2">판매처</th>
-                        <th>가격</th>
+                        <th>비교가격</th>
                         <th>배송비</th>
                         <th>확인 시각</th>
                       </tr>
@@ -135,7 +134,7 @@ export default function ProductDetailPage({ id }: { id: string }) {
                           <td>{formatPrice(offer.price)}</td>
                           <td>
                             {offer.shippingFee === null
-                              ? "미확인"
+                              ? "미확인 · 표시가격 기준"
                               : offer.shippingFee === 0
                                 ? "무료"
                                 : `${formatPrice(offer.shippingFee)} 포함`}
@@ -152,8 +151,8 @@ export default function ProductDetailPage({ id }: { id: string }) {
                 </div>
               )}
               <p className="mt-3 text-xs text-[var(--text-muted)]">
-                월별 차트는 다나와 이력입니다. 현재 판매처의 배송비 포함 가격과
-                기준이 다를 수 있습니다.
+                월별 차트는 다나와 이력입니다. 현재 판매처 비교가격은 배송비
+                확인 여부에 따라 기준이 다를 수 있습니다.
               </p>
               <div className="mt-7 rounded-xl bg-[var(--surface)] p-5">
                 <PriceRangeBar product={product} />

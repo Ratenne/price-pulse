@@ -74,6 +74,11 @@ export interface Product extends PriceSummary, FairPriceRange {
   currentPriceMonth?: string;
   currentPriceSource?: RetailOffer["source"];
   currentPriceUrl?: string;
+  currentPriceShippingFeeKnown?: boolean;
+  currentPriceComparisonBasis?: RetailOffer["comparisonBasis"];
+  currentPriceShippingFee?: number | null;
+  currentPriceDisplayedPrice?: number | null;
+  currentPriceItemPrice?: number | null;
   offers?: RetailOffer[];
   analysis?: PriceAnalysis;
   observedPriceHistory?: PriceHistoryPoint[];

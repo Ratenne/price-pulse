@@ -5,6 +5,7 @@ import { getCategoryLabel } from "@/domain/category";
 import {
   formatPrice,
   formatCurrentPrice,
+  formatCurrentPriceBasis,
   formatRate,
   PRICE_STATUS_LABELS,
 } from "@/lib/productFormatting";
@@ -42,7 +43,7 @@ export function ProductList({
             <Link
               href={`/products/${product.id}`}
               className="ranking-row"
-              aria-label={`${ranked && hasPriceAnalysis(product) ? `${offset + index + 1}위 ` : ""}${product.displayName}, 현재 ${formatCurrentPrice(product)}, ${rangeLabel} ${formatRate(product.priceRangeRate)}, ${PRICE_STATUS_LABELS[product.priceStatus]}, 상세보기`}
+              aria-label={`${ranked && hasPriceAnalysis(product) ? `${offset + index + 1}위 ` : ""}${product.displayName}, 현재 ${formatCurrentPrice(product)}, ${formatCurrentPriceBasis(product)}, ${rangeLabel} ${formatRate(product.priceRangeRate)}, ${PRICE_STATUS_LABELS[product.priceStatus]}, 상세보기`}
             >
               <div className="ranking-product">
                 {ranked && hasPriceAnalysis(product) && (
@@ -73,6 +74,9 @@ export function ProductList({
               <strong className="ranking-price">
                 <span className="mobile-label">현재 가격</span>
                 {formatCurrentPrice(product)}
+                <small className="block text-xs font-normal text-[var(--text-muted)]">
+                  {formatCurrentPriceBasis(product)}
+                </small>
               </strong>
               <div className="ranking-range">
                 <strong>{formatRate(product.priceRangeRate)}</strong>

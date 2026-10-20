@@ -21,6 +21,22 @@ export function formatCurrentPrice(product: Product): string {
     ? "확인 중"
     : formatPrice(product.currentPrice);
 }
+export function formatCurrentPriceBasis(product: Product): string {
+  if (!product.currentPriceSource || product.currentPriceSource === "DANAWA")
+    return "현재 참고가";
+  const offer = product.offers?.find(
+    v =>
+      v.source === product.currentPriceSource &&
+      (!product.currentPriceUrl || v.url === product.currentPriceUrl)
+  );
+  const known =
+    product.currentPriceShippingFeeKnown ??
+    offer?.shippingFeeKnown ??
+    (offer !== undefined && offer.shippingFee !== null);
+  return known
+    ? "배송비 포함 확정 비교가격"
+    : "표시가격 기준 비교가격 · 배송비 미확인";
+}
 
 export function formatRate(rate: number | null): string {
   if (rate === null) return "데이터 부족";

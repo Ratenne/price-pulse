@@ -39,6 +39,68 @@ function pool(query: ReturnType<typeof vi.fn>) {
 }
 beforeEach(() => vi.clearAllMocks());
 describe("page-scoped product queries", () => {
+  it.each([null, 0, 3000])(
+    "returns shipping %s and the comparison basis in catalog and live API",
+    async shippingFee => {
+      const known = shippingFee !== null,
+        price = known ? 100000 + shippingFee : 99000;
+      const basis = known ? "SHIPPING_INCLUDED" : "DISPLAYED_PRICE";
+      const query = vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [summary] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              ...row,
+              current_price: price,
+              current_price_source: "NAVER",
+              current_price_shipping_fee_known: known,
+              current_price_comparison_basis: basis,
+              current_price_shipping_fee: shippingFee,
+              current_price_displayed_price: 99000,
+              current_price_item_price: 100000,
+            },
+          ],
+        });
+      const page = await readProductPage(
+        pool(query),
+        parseProductQuery("/?view=category&sort=price-asc"),
+        now
+      );
+      expect("products" in page && page.products[0]).toMatchObject({
+        currentPrice: price,
+        currentPriceShippingFeeKnown: known,
+        currentPriceComparisonBasis: basis,
+        currentPriceShippingFee: shippingFee,
+      });
+      const live = await readProductPage(
+        pool(
+          vi.fn().mockResolvedValue({
+            rows: [
+              {
+                id: "danawa-1",
+                price,
+                checked_at: checkedAt,
+                source: "NAVER",
+                shipping_fee_known: known,
+                comparison_basis: basis,
+                shipping_fee: shippingFee,
+              },
+            ],
+          })
+        ),
+        parseProductQuery("/?view=live&ids=danawa-1"),
+        now
+      );
+      expect("prices" in live && live.prices[0]).toMatchObject({
+        price,
+        shippingFeeKnown: known,
+        comparisonBasis: basis,
+        shippingFee,
+      });
+      expect(query.mock.calls[1][0]).toContain("ORDER BY current_price ASC");
+    }
+  );
   it("preserves stored retailer offers and Danawa fallback while retail collection is disabled", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     try {

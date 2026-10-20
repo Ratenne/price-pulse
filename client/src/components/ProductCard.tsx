@@ -3,6 +3,7 @@ import { getCategoryLabel } from "@/domain/category";
 import {
   formatPrice,
   formatCurrentPrice,
+  formatCurrentPriceBasis,
   formatRate,
   getNearLowestMessage,
   PRICE_STATUS_LABELS,
@@ -46,11 +47,7 @@ export function ProductCard({
         <h3>{product.modelName}</h3>
       </Link>
       <div className="card-price">
-        <span>
-          {product.currentPriceSource && product.currentPriceSource !== "DANAWA"
-            ? "배송비 포함 최저가"
-            : "현재 참고가"}
-        </span>
+        <span>{formatCurrentPriceBasis(product)}</span>
         <strong>{formatCurrentPrice(product)}</strong>
       </div>
       {showRangeAmount && (

@@ -59,6 +59,8 @@ try {
     "004_live_price_snapshot",
     "008_retail_prices",
     "009_price_observation_policy",
+    "010_retail_product_identity",
+    "011_retail_comparison_prices",
   ]) {
     await db.exec(
       readFileSync(new URL(`../${name}.sql`, import.meta.url), "utf8")

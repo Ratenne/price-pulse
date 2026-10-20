@@ -5,6 +5,10 @@ import {
 import { retailApiReadiness } from "../integrations/retail/retailApiSupport.js";
 import { PgRetailProductRepository } from "../repositories/retailProductRepository.js";
 import { upsertRetailProducts } from "../services/retailProductUpsert.js";
+import { refreshNaverProducts } from "../services/naverProductRefresh.js";
+import { retailComparisonPrice } from "../../shared/retailPrices.js";
+import { normalizeNaverDiscovery } from "../integrations/retail/naverDiscovery.js";
+import { importNaverDiscovery } from "../services/naverDiscoveryImport.js";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { getDatabasePool, closeDatabasePool } from "../config/database.js";
@@ -33,6 +37,9 @@ async function main() {
   let file: string | undefined,
     importFile: string | undefined,
     productFile: string | undefined,
+    naverFile: string | undefined,
+    discoveryFile: string | undefined,
+    discoveryImportFile: string | undefined,
     apiStatus = false,
     probe = false,
     list = false;
@@ -40,19 +47,77 @@ async function main() {
     if (args[i] === "--links" && args[i + 1]) file = args[++i];
     else if (args[i] === "--import" && args[i + 1]) importFile = args[++i];
     else if (args[i] === "--products" && args[i + 1]) productFile = args[++i];
+    else if (args[i] === "--naver" && args[i + 1]) naverFile = args[++i];
+    else if (args[i] === "--naver-discovery" && args[i + 1])
+      discoveryFile = args[++i];
+    else if (args[i] === "--naver-discovery-import" && args[i + 1])
+      discoveryImportFile = args[++i];
     else if (args[i] === "--api-status") apiStatus = true;
     else if (args[i] === "--probe") probe = true;
     else if (args[i] === "--list") list = true;
     else
       throw new Error(
-        "Usage: refreshRetailPrices [--links FILE] [--probe | --list | --api-status | --import FILE | --products FILE]"
+        "Usage: refreshRetailPrices [--links FILE] [--probe | --list | --api-status | --import FILE | --products FILE | --naver URLS_FILE | --naver-discovery JSON_FILE | --naver-discovery-import JSON_FILE]"
       );
   }
   if (
-    [probe, list, apiStatus, !!importFile, !!productFile].filter(Boolean)
-      .length > 1
+    [
+      probe,
+      list,
+      apiStatus,
+      !!importFile,
+      !!productFile,
+      !!naverFile,
+      !!discoveryFile,
+      !!discoveryImportFile,
+    ].filter(Boolean).length > 1
   )
     throw new Error("Conflicting modes");
+  if (discoveryFile || discoveryImportFile) {
+    const page = normalizeNaverDiscovery(
+      await jsonFile((discoveryFile ?? discoveryImportFile)!)
+    );
+    if (!discoveryImportFile) {
+      process.stdout.write(JSON.stringify(page, null, 2) + "\n");
+      return;
+    }
+    const repository = {
+      upsert: (...args: Parameters<PgRetailProductRepository["upsert"]>) =>
+        new PgRetailProductRepository(getDatabasePool()).upsert(...args),
+      holdCandidate: (
+        ...args: Parameters<PgRetailProductRepository["holdCandidate"]>
+      ) =>
+        new PgRetailProductRepository(getDatabasePool()).holdCandidate(...args),
+    };
+    const summary = await importNaverDiscovery(
+      repository,
+      logger,
+      page.candidates
+    );
+    if (
+      (!summary.created && !summary.matched) ||
+      summary.skipped ||
+      summary.held ||
+      summary.failed
+    )
+      process.exitCode = 2;
+    return;
+  }
+  if (naverFile) {
+    const urls = z
+      .array(z.string().url())
+      .min(1)
+      .max(500)
+      .parse(await jsonFile(naverFile));
+    const repository = {
+      upsert: (...args: Parameters<PgRetailProductRepository["upsert"]>) =>
+        new PgRetailProductRepository(getDatabasePool()).upsert(...args),
+    };
+    const result = await refreshNaverProducts(repository, logger, urls);
+    if (!result.succeeded || result.failed || result.skipped || result.held)
+      process.exitCode = 2;
+    return;
+  }
   if (apiStatus) {
     for (const source of RETAIL_API_SOURCES)
       logger.info("Retail API readiness", { ...retailApiReadiness(source) });
@@ -83,7 +148,7 @@ async function main() {
           source: link.source,
           itemPrice: offer.itemPrice,
           shippingFee: offer.shippingFee,
-          total: offer.itemPrice + offer.shippingFee,
+          total: retailComparisonPrice(offer),
         });
       } catch (error) {
         logger.warn("Retail probe failed (no DB writes)", {
@@ -175,7 +240,8 @@ async function main() {
     const access = isRetailApiSource(seed.source)
       ? retailApiReadiness(seed.source)
       : checkRetailExecution(seed.source, {
-          method: "API",
+          method: seed.source === "NAVER" ? "CRAWL" : "API",
+          url: seed.url,
           adapterConfigured: false,
         });
     if (access.allowed) throw new Error("UNEXPECTED_RUNNABLE_SOURCE");

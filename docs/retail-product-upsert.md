@@ -1,5 +1,9 @@
 # Phase 2: 상품 동일성 검사와 소매 가격 UPSERT
 
+Phase 4.2의 [배송비 미확인 정책과 Discovery 승격](naver-discovery.md)이 가격 검증을
+확장했다. 배송비 NULL은 검증된 displayedPrice가 있을 때 허용되며 동일성·신규 상품
+검토 규칙은 유지한다. 아래 Phase 2 스키마·검증 기록은 당시 기준이다.
+
 ## 구현 전 스키마 검토
 
 | Current Schema                                                          | Required Change                                                                                 | Reason                                                                | Data Impact                                                                 |

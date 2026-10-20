@@ -7,6 +7,7 @@ import {
   validateObservation,
   validateRetailUrl,
   type RetailLink,
+  validateStoredRetailObservation,
 } from "./retailPrice";
 
 const link: RetailLink = {
@@ -35,6 +36,37 @@ const observed = {
   observedAt: now.toISOString(),
 };
 describe("reviewed retail prices", () => {
+  it("accepts shipping NULL only with separately verified displayed-price evidence", () => {
+    expect(
+      validateObservation(
+        link,
+        { ...observed, shippingFee: null, displayedPrice: 880000 },
+        now
+      )
+    ).toMatchObject({ shippingFee: null, displayedPrice: 880000 });
+    expect(() =>
+      validateObservation(link, { ...observed, shippingFee: null }, now)
+    ).toThrow();
+    expect(() =>
+      validateObservation(
+        link,
+        { ...observed, shippingFee: null, displayedPrice: 0 },
+        now
+      )
+    ).toThrow();
+    expect(
+      validateStoredRetailObservation(
+        link,
+        {
+          ...observed,
+          availability: "OUT_OF_STOCK",
+          itemPrice: null,
+          shippingFee: null,
+        },
+        now
+      )
+    ).toMatchObject({ availability: "OUT_OF_STOCK", shippingFee: null });
+  });
   it("extracts ordinary price plus shipping from the reduced real 11st response", () => {
     expect(parseElevenStreetOffer(fixture, link, now)).toEqual(observed);
     // Lower member/coupon prices must never replace selPrc.

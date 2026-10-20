@@ -1,6 +1,7 @@
 import type { Product } from "../client/src/domain/product";
 import type { ProductCategory } from "../client/src/domain/category";
 import { hasPriceAnalysis } from "./priceAnalysis";
+import type { RetailOffer } from "./retailPrices";
 
 export interface CatalogSummary {
   category: ProductCategory;
@@ -16,7 +17,9 @@ export interface ProductPage {
   summaries: CatalogSummary[];
 }
 export interface LivePricePage {
-  prices: { id: string; price: number | null; checkedAt: string }[];
+  prices: ({ id: string; price: number | null; checkedAt: string } & Partial<
+    Omit<RetailOffer, "price" | "checkedAt">
+  >)[];
 }
 
 export function applyCurrentPrice(

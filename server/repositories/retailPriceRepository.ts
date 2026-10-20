@@ -99,10 +99,11 @@ export class PgRetailPriceRepository implements RetailPriceRepository {
     const duplicate = await client.query<{
       item_price: string | null;
       shipping_fee: string | null;
+      displayed_price: string | null;
       link_version: number;
       availability: string;
     }>(
-      `SELECT item_price,shipping_fee,link_version,availability FROM retail_price_observations WHERE listing_id=$1 AND observed_at=$2`,
+      `SELECT item_price,shipping_fee,displayed_price,link_version,availability FROM retail_price_observations WHERE listing_id=$1 AND observed_at=$2`,
       [link.id, offer.observedAt]
     );
     const prior = duplicate.rows[0];
@@ -112,13 +113,16 @@ export class PgRetailPriceRepository implements RetailPriceRepository {
         offer.itemPrice ||
         (prior.shipping_fee === null ? null : Number(prior.shipping_fee)) !==
           offer.shippingFee ||
+        (prior.displayed_price == null
+          ? null
+          : Number(prior.displayed_price)) !== (offer.displayedPrice ?? null) ||
         prior.link_version !== link.version ||
         prior.availability !== offer.availability)
     )
       throw new Error("OBSERVATION_CONFLICT");
     await client.query(
-      `INSERT INTO retail_price_observations(listing_id,observed_at,item_price,shipping_fee,method,link_version,availability,data_source,title)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(listing_id,observed_at) DO NOTHING`,
+      `INSERT INTO retail_price_observations(listing_id,observed_at,item_price,shipping_fee,method,link_version,availability,data_source,title,displayed_price)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(listing_id,observed_at) DO NOTHING`,
       [
         link.id,
         offer.observedAt,
@@ -129,13 +133,14 @@ export class PgRetailPriceRepository implements RetailPriceRepository {
         offer.availability,
         dataSource ?? null,
         offer.title,
+        offer.displayedPrice ?? null,
       ]
     );
     const saved = await client.query(
-      `INSERT INTO retail_current_offers AS c(listing_id,observed_at,item_price,shipping_fee,link_version,availability)
-       VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(listing_id) DO UPDATE SET
+      `INSERT INTO retail_current_offers AS c(listing_id,observed_at,item_price,shipping_fee,link_version,availability,displayed_price)
+       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(listing_id) DO UPDATE SET
        observed_at=excluded.observed_at,item_price=excluded.item_price,shipping_fee=excluded.shipping_fee,
-       link_version=excluded.link_version,availability=excluded.availability
+       link_version=excluded.link_version,availability=excluded.availability,displayed_price=excluded.displayed_price
        WHERE c.observed_at<excluded.observed_at`,
       [
         link.id,
@@ -144,6 +149,7 @@ export class PgRetailPriceRepository implements RetailPriceRepository {
         offer.shippingFee,
         link.version,
         offer.availability,
+        offer.displayedPrice ?? null,
       ]
     );
     await client.query(

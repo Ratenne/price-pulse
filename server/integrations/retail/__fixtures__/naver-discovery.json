@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "page": 1,
+      "slots": [
+        {
+          "slotType": "CARD",
+          "data": {
+            "nvMid": "70001",
+            "productNameOrg": "Test <mark>GPU</mark>",
+            "productUrl": {
+              "pcUrl": "https://smartstore.naver.com/unit-a/products/123"
+            },
+            "mallName": "Unit A",
+            "salePrice": 110000,
+            "discountedSalePrice": 100000,
+            "images": [
+              {
+                "imageUrl": "https://shopping-phinf.pstatic.net/unit-image.jpg"
+              }
+            ],
+            "category1Name": "디지털/가전",
+            "category2Name": "PC부품",
+            "totalReviewCount": 12
+          }
+        },
+        {
+          "slotType": "CARD",
+          "data": {
+            "nvMid": "70001",
+            "productNameOrg": "Test GPU",
+            "productUrl": {
+              "pcUrl": "https://smartstore.naver.com/unit-b/products/456"
+            },
+            "mallName": "Unit B",
+            "salePrice": 99000,
+            "totalReviewCount": 4
+          }
+        }
+      ]
+    }
+  ]
+}

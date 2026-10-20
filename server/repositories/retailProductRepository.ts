@@ -29,7 +29,14 @@ export interface RetailProductRepository {
   upsert(
     input: RetailProductInput,
     review?: RetailProductReview,
-    now?: Date
+    now?: Date,
+    discoveryCandidateKey?: string
+  ): Promise<RetailProductUpsertResult>;
+}
+export interface RetailDiscoveryRepository extends RetailProductRepository {
+  holdCandidate(
+    input: Pick<RetailProductInput, "source" | "externalProductId" | "title">,
+    reason: string
   ): Promise<RetailProductUpsertResult>;
 }
 interface ProductIdentityRow {
@@ -43,7 +50,7 @@ const IDENTITY_COLUMNS = `p.id AS "productId",p.name AS "productName",p.category
 const hasOptions = (keys: string[] | null, identity: RetailIdentity) =>
   !!keys?.length && keys.every(key => !!identity.variants[key]);
 
-export class PgRetailProductRepository implements RetailProductRepository {
+export class PgRetailProductRepository implements RetailDiscoveryRepository {
   private readonly prices: PgRetailPriceRepository;
   constructor(private readonly pool: Pool) {
     this.prices = new PgRetailPriceRepository(pool);
@@ -52,7 +59,8 @@ export class PgRetailProductRepository implements RetailProductRepository {
   async upsert(
     input: RetailProductInput,
     review?: RetailProductReview,
-    now = new Date()
+    now = new Date(),
+    discoveryCandidateKey?: string
   ): Promise<RetailProductUpsertResult> {
     const client = await this.pool.connect();
     try {
@@ -62,7 +70,13 @@ export class PgRetailProductRepository implements RetailProductRepository {
         "SELECT pg_advisory_xact_lock(hashtext('RETAIL_LISTING'),hashtext($1))",
         [`${input.source}:${input.externalProductId}`]
       );
-      const result = await this.process(client, input, review, now);
+      const result = await this.process(
+        client,
+        input,
+        review,
+        now,
+        discoveryCandidateKey
+      );
       await client.query("COMMIT");
       return result;
     } catch (error) {
@@ -75,7 +89,7 @@ export class PgRetailProductRepository implements RetailProductRepository {
 
   private async hold(
     client: PoolClient,
-    input: RetailProductInput,
+    input: Pick<RetailProductInput, "source" | "externalProductId" | "title">,
     reason: string,
     candidates: string[] = []
   ): Promise<RetailProductUpsertResult> {
@@ -89,11 +103,26 @@ export class PgRetailProductRepository implements RetailProductRepository {
     return { status: "HELD", reason, candidates: ids };
   }
 
+  async holdCandidate(
+    input: Pick<RetailProductInput, "source" | "externalProductId" | "title">,
+    reason: string
+  ) {
+    const client = await this.pool.connect();
+    try {
+      // The queue's existing source/external ID primary key makes replay one
+      // hold, without creating a product, listing, identity or price row.
+      return await this.hold(client, input, reason);
+    } finally {
+      client.release();
+    }
+  }
+
   private async process(
     client: PoolClient,
     input: RetailProductInput,
     review: RetailProductReview | undefined,
-    now: Date
+    now: Date,
+    discoveryCandidateKey?: string
   ): Promise<RetailProductUpsertResult> {
     const mappings = await client.query<
       RetailLink & { externalProductId: string | null; enabled: boolean }
@@ -299,6 +328,7 @@ export class PgRetailProductRepository implements RetailProductRepository {
           title: input.title,
           itemPrice: input.itemPrice ?? null,
           shippingFee: input.shippingFee ?? null,
+          displayedPrice: input.displayedPrice,
           currency: input.currency,
           condition: input.condition,
           availability: input.availability,
@@ -377,8 +407,14 @@ export class PgRetailProductRepository implements RetailProductRepository {
       input.dataSource
     );
     await client.query(
-      `UPDATE retail_product_review_queue SET resolved_at=now(),last_seen_at=now() WHERE source=$1 AND external_product_id=$2`,
-      [input.source, input.externalProductId]
+      `UPDATE retail_product_review_queue SET resolved_at=now(),last_seen_at=now() WHERE source=$1 AND external_product_id=ANY($2::text[])`,
+      [
+        input.source,
+        [
+          input.externalProductId,
+          ...(discoveryCandidateKey ? [discoveryCandidateKey] : []),
+        ],
+      ]
     );
     return {
       status: created ? "CREATED" : "MATCHED",

@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { RETAILERS, type Retailer } from "../../../shared/retailPrices.js";
+import {
+  RETAILERS,
+  retailComparisonPrice,
+  type Retailer,
+} from "../../../shared/retailPrices.js";
 
 const HOSTS: Record<Retailer, string[]> = {
   COUPANG: ["www.coupang.com"],
@@ -73,7 +77,11 @@ export const observationSchema = z
     listingId: z.number().int().positive(),
     title: z.string().min(1).max(500),
     itemPrice: money.refine(v => v > 0),
-    shippingFee: money,
+    shippingFee: money.nullable(),
+    displayedPrice: money
+      .refine(v => v > 0)
+      .nullable()
+      .optional(),
     currency: z.literal("KRW"),
     condition: z.literal("NEW"),
     availability: z.literal("IN_STOCK"),
@@ -82,8 +90,8 @@ export const observationSchema = z
   })
   .strict()
   .refine(
-    v => v.itemPrice + v.shippingFee <= 2_000_000_000,
-    "Total exceeds supported range"
+    v => retailComparisonPrice(v) !== null,
+    "Verified comparison price required"
   );
 export type RetailObservation = z.infer<typeof observationSchema>;
 export function validateObservation(
@@ -119,7 +127,7 @@ export const collectionSchema = z
     externalProductId: z.string().trim().min(1),
     manufacturer: z.string().trim().min(1).optional(),
     model: z.string().trim().min(1).optional(),
-    method: z.enum(["API", "IMPORT"]),
+    method: z.enum(["API", "IMPORT", "CRAWL"]),
     dataSource: z.string().trim().min(1),
   })
   .strict();
@@ -169,7 +177,7 @@ const storedObservationSchema = z
   .refine(
     v =>
       v.availability === "OUT_OF_STOCK" ||
-      (v.itemPrice !== null && v.shippingFee !== null)
+      (v.itemPrice !== null && retailComparisonPrice(v) !== null)
   )
   .refine(
     v =>

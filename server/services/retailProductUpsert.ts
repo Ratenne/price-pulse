@@ -22,6 +22,8 @@ export async function upsertRetailProducts(
     env?: NodeJS.ProcessEnv;
     adapterConfigured?: boolean;
     now?: Date;
+    // Trusted server context only, never taken from a provider input record.
+    discoveryCandidateKey?: string;
   } = {}
 ) {
   const verifiedReviews = z
@@ -56,6 +58,7 @@ export async function upsertRetailProducts(
     const access = checkRetailExecution(input.source, {
       ...options,
       method: input.method,
+      url: input.url,
       adapterConfigured:
         input.method === "IMPORT" || options.adapterConfigured === true,
     });
@@ -71,11 +74,17 @@ export async function upsertRetailProducts(
       continue;
     }
     try {
-      const result = await repository.upsert(
-        input,
-        byListing.get(`${input.source}:${input.externalProductId}`),
-        options.now
+      const review = byListing.get(
+        `${input.source}:${input.externalProductId}`
       );
+      const result = options.discoveryCandidateKey
+        ? await repository.upsert(
+            input,
+            review,
+            options.now,
+            options.discoveryCandidateKey
+          )
+        : await repository.upsert(input, review, options.now);
       if (result.status === "HELD") {
         summary.held++;
         logger.warn("Retail product requires review", {

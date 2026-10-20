@@ -56,6 +56,24 @@ function run(args: string[], overrides: NodeJS.ProcessEnv = {}) {
   return { status: result.status, output };
 }
 describe("retail manual entry points", () => {
+  it("normalizes Discovery JSON offline and blocks its import without source approval", () => {
+    const file = new URL(
+      "../integrations/retail/__fixtures__/naver-discovery.json",
+      import.meta.url
+    ).pathname;
+    const normalized = run(["--naver-discovery", file]);
+    expect(normalized.status).toBe(0);
+    expect(normalized.output).toContain('"kind": "DISCOVERY_PAGE"');
+    expect(normalized.output).toContain('"shippingFeeKnown": false');
+    expect(normalized.output).toContain('"priceObservationsSaved": 0');
+    const imported = run(["--naver-discovery-import", file], {
+      RETAIL_NAVER_ENABLED: "true",
+    });
+    expect(imported.status).toBe(2);
+    expect(imported.output).toContain('"skipped":2');
+    expect(imported.output).toContain('"updated":0');
+    expect(run(["--naver-discovery", file, "--api-status"]).status).toBe(1);
+  });
   it("skips the default batch without connecting to retailers or the database", () => {
     const result = run([]);
     expect(result.status).toBe(2);
@@ -165,5 +183,20 @@ describe("retail manual entry points", () => {
     );
     expect(workflow).not.toMatch(/^\s*(schedule|cron):/m);
     expect(workflow).toContain("workflow_dispatch:");
+  });
+  it("keeps the Naver entry point disabled/pending before any network or DB access", () => {
+    const file = path.join(directory, "naver-urls.json");
+    writeFileSync(
+      file,
+      JSON.stringify(["https://smartstore.naver.com/unit-shop/products/123"])
+    );
+    for (const env of [{}, { RETAIL_NAVER_ENABLED: "true" }]) {
+      const result = run(["--naver", file], env);
+      expect(result.status).toBe(2);
+      expect(result.output).toContain('"succeeded":0');
+      expect(result.output).toContain('"fetched":0');
+      expect(result.output).toContain('"skipped":1');
+    }
+    expect(run(["--naver", file, "--api-status"]).status).toBe(1);
   });
 });

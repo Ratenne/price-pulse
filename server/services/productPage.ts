@@ -99,6 +99,11 @@ interface SummaryRow {
   current_price_checked_at: string | null;
   current_price_source?: Product["currentPriceSource"];
   current_price_url?: string;
+  current_price_shipping_fee_known?: boolean;
+  current_price_comparison_basis?: Product["currentPriceComparisonBasis"];
+  current_price_shipping_fee?: number | null;
+  current_price_displayed_price?: number | null;
+  current_price_item_price?: number | null;
   offers?: Product["offers"];
   valid_count: number;
   monthly_count: number;
@@ -112,8 +117,8 @@ interface SummaryRow {
   data_status: NonNullable<Product["analysis"]>["dataStatus"];
 }
 // Aggregate the requested six-month window in PostgreSQL. Lists never materialize full history arrays.
-// Current offers are collected by batches. The view chooses verified delivered
-// retail prices, with the existing Danawa price as a reference fallback.
+// Current offers are collected by batches. The view chooses eligible stored
+// retail comparison prices, with the existing Danawa reference fallback.
 const STATS = `WITH monthly AS (
  SELECT h.product_id,h.price_year_month,h.price,h.updated_at
  FROM price_histories_for_analysis h
@@ -167,7 +172,10 @@ const STATS = `WITH monthly AS (
  WHEN coalesce(a.valid_count,0)<2 OR hs.status='INSUFFICIENT_HISTORY' THEN 'INSUFFICIENT_HISTORY' ELSE 'NORMAL' END AS data_status,
  CASE WHEN ${FRESH_SNAPSHOT} THEN cp.price::float8 END AS current_price,
  to_char(cp.checked_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS current_price_checked_at,
- cp.source AS current_price_source,cp.url AS current_price_url,cp.offers
+ cp.source AS current_price_source,cp.url AS current_price_url,cp.offers,
+ cp.shipping_fee_known AS current_price_shipping_fee_known,cp.comparison_basis AS current_price_comparison_basis,
+ cp.shipping_fee::float8 AS current_price_shipping_fee,cp.displayed_price::float8 AS current_price_displayed_price,
+ cp.item_price::float8 AS current_price_item_price
  FROM products p LEFT JOIN product_source_mappings m ON m.product_id=p.id AND m.source='DANAWA'
  LEFT JOIN product_current_prices cp ON cp.product_id=p.id
  LEFT JOIN aggregate_prices a ON a.product_id=p.id
@@ -228,6 +236,13 @@ function toProduct(row: SummaryRow, currentMonth: string): Product {
       currentPriceMonth: currentMonth,
       currentPriceSource: row.current_price_source,
       currentPriceUrl: row.current_price_url,
+      currentPriceShippingFeeKnown:
+        row.current_price_shipping_fee_known ?? undefined,
+      currentPriceComparisonBasis:
+        row.current_price_comparison_basis ?? undefined,
+      currentPriceShippingFee: row.current_price_shipping_fee,
+      currentPriceDisplayedPrice: row.current_price_displayed_price,
+      currentPriceItemPrice: row.current_price_item_price,
       offers: row.offers ?? [],
       analysis: {
         comparable,
@@ -353,9 +368,18 @@ async function readSnapshotPrices(
     id: string;
     price: number | null;
     checked_at: string | null;
+    source?: Product["currentPriceSource"];
+    url?: string;
+    shipping_fee_known?: boolean;
+    comparison_basis?: Product["currentPriceComparisonBasis"];
+    shipping_fee?: number | null;
+    displayed_price?: number | null;
+    item_price?: number | null;
   }>(
     `SELECT p.id,CASE WHEN ${FRESH_SNAPSHOT} THEN cp.price::float8 END AS price,
-     to_char(cp.checked_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS checked_at
+     to_char(cp.checked_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS checked_at,
+     cp.source,cp.url,cp.shipping_fee_known,cp.comparison_basis,
+     cp.shipping_fee::float8 AS shipping_fee,cp.displayed_price::float8 AS displayed_price,cp.item_price::float8 AS item_price
      FROM products p LEFT JOIN product_source_mappings m ON m.product_id=p.id AND m.source='DANAWA'
      LEFT JOIN product_current_prices cp ON cp.product_id=p.id
      WHERE p.id=ANY($1::text[]) AND (m.source_url LIKE 'https://prod.danawa.com/info/%' OR m.product_id IS NULL)`,
@@ -366,6 +390,17 @@ async function readSnapshotPrices(
       id: row.id,
       price: row.price,
       checkedAt: row.checked_at ?? now.toISOString(),
+      ...(row.source
+        ? {
+            source: row.source,
+            url: row.url,
+            shippingFeeKnown: row.shipping_fee_known,
+            comparisonBasis: row.comparison_basis,
+            shippingFee: row.shipping_fee,
+            displayedPrice: row.displayed_price,
+            itemPrice: row.item_price,
+          }
+        : {}),
     })),
   };
 }

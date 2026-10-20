@@ -14,6 +14,19 @@ import {
   type RetailProductInput,
 } from "../../server/domain/retailProduct.ts";
 import { upsertRetailProducts } from "../../server/services/retailProductUpsert.ts";
+import { refreshNaverProducts } from "../../server/services/naverProductRefresh.ts";
+import { naverTestPolicy } from "../../server/integrations/retail/__fixtures__/naverTestSupport.ts";
+import { normalizeNaverDiscovery } from "../../server/integrations/retail/naverDiscovery.ts";
+import {
+  importNaverDiscovery,
+  naverVerifiedListingId,
+  type NaverDiscoveryVerification,
+} from "../../server/services/naverDiscoveryImport.ts";
+import {
+  discoveryPolicy,
+  discoveryVerification,
+  discoveryProductReview,
+} from "../../server/integrations/retail/__fixtures__/naverDiscoveryTestSupport.ts";
 import {
   readProductPage,
   parseProductQuery,
@@ -190,6 +203,8 @@ try {
     async () => {
       await apply("010_retail_product_identity");
       await apply("010_retail_product_identity");
+      await apply("011_retail_comparison_prices");
+      await apply("011_retail_comparison_prices");
       assert.deepEqual(
         await rows("SELECT * FROM products ORDER BY id"),
         originals
@@ -754,6 +769,650 @@ try {
         await rows("SELECT * FROM products WHERE id='danawa-existing'"),
         originals
       );
+    }
+  );
+  // Synthetic NORMALIZED inputs and a test Parser dependency only. No Naver
+  // product HTML, network access or real product-ID namespace is asserted.
+  const naverBase = retailProductInputSchema.parse({
+    ...created,
+    source: "NAVER",
+    method: "CRAWL",
+    externalProductId: "unit-naver-listing-123",
+    url: "https://smartstore.naver.com/unit-shop/products/123",
+    dataSource: "https://smartstore.naver.com/unit-shop/products/123",
+    title: "Synthetic Naver GPU",
+    itemPrice: 100000,
+    shippingFee: 1000,
+  });
+  const naverRun = (
+    inputs: RetailProductInput[],
+    reviews: RetailProductReview[] = []
+  ) => {
+    const byUrl = new Map(inputs.map(v => [v.url, v]));
+    return refreshNaverProducts(
+      repository,
+      { info() {}, warn() {}, error() {} },
+      inputs.map(v => v.url),
+      {
+        env: { RETAIL_NAVER_ENABLED: "true" },
+        clock: () => now,
+        reviews,
+        policies: {
+          NAVER: {
+            ...naverTestPolicy,
+            verifiedAt: at(-20),
+            expiresAt: new Date(now.getTime() + 3600000).toISOString(),
+            crawl: {
+              ...naverTestPolicy.crawl,
+              allowedUrls: inputs.map(v => v.url),
+            },
+          },
+        },
+        collector: {
+          collect: async url => ({
+            url,
+            html: "unused synthetic transport data",
+            observedAt: byUrl.get(url)!.observedAt!,
+          }),
+        },
+        parser: {
+          verified: true,
+          parse: page => ({ status: "PARSED", input: byUrl.get(page.url)! }),
+        },
+      }
+    );
+  };
+  const otherRetailHistory = await rows(
+    `SELECT o.* FROM retail_price_observations o JOIN retail_product_links l ON l.id=o.listing_id WHERE l.source<>'NAVER' ORDER BY o.listing_id,o.observed_at`
+  );
+  await check(
+    "Naver normalized CRAWL shares an existing identity and the lowest-total view",
+    async () => {
+      const before = await count("products");
+      const result = await naverRun([naverBase]);
+      assert.equal(result.matched, 1);
+      assert.equal(result.created, 0);
+      assert.equal(await count("products"), before);
+      const saved = (
+        await rows(
+          `SELECT l.product_id,o.method,o.data_source,o.item_price,o.shipping_fee
+      FROM retail_product_links l JOIN retail_price_observations o ON o.listing_id=l.id WHERE l.source='NAVER' AND l.external_product_id=$1`,
+          [naverBase.externalProductId]
+        )
+      )[0];
+      assert.equal(saved.product_id, createdId!);
+      assert.equal(saved.method, "CRAWL");
+      assert.equal(saved.data_source, naverBase.url);
+      assert.equal(Number(saved.item_price), 100000);
+      assert.equal(Number(saved.shipping_fee), 1000);
+      const lowest = (
+        await rows(
+          "SELECT source,price FROM product_current_prices WHERE product_id=$1",
+          [createdId!]
+        )
+      )[0];
+      assert.equal(lowest.source, "NAVER");
+      assert.equal(Number(lowest.price), 101000);
+    }
+  );
+  await check(
+    "Naver one-won components, duplicate/conflicting and stale observations preserve history",
+    async () => {
+      for (const [minute, itemPrice, shippingFee] of [
+        [1, 100001, 1000],
+        [2, 99999, 1000],
+        [3, 99998, 1001],
+      ]) {
+        assert.equal(
+          (
+            await naverRun([
+              { ...naverBase, itemPrice, shippingFee, observedAt: at(minute) },
+            ])
+          ).matched,
+          1
+        );
+      }
+      const latest = {
+        ...naverBase,
+        itemPrice: 99998,
+        shippingFee: 1001,
+        observedAt: at(3),
+      };
+      const where =
+        "listing_id IN (SELECT id FROM retail_product_links WHERE source='NAVER' AND external_product_id=$1)";
+      assert.equal(
+        await count("retail_price_observations", where, [
+          naverBase.externalProductId,
+        ]),
+        4
+      );
+      const before = await rows(
+        `SELECT * FROM retail_price_observations WHERE ${where} ORDER BY observed_at`,
+        [naverBase.externalProductId]
+      );
+      assert.equal((await naverRun([latest])).updated, 0);
+      assert.equal(
+        (await naverRun([{ ...latest, itemPrice: latest.itemPrice + 1 }]))
+          .failed,
+        1
+      );
+      assert.deepEqual(
+        await rows(
+          `SELECT * FROM retail_price_observations WHERE ${where} ORDER BY observed_at`,
+          [naverBase.externalProductId]
+        ),
+        before
+      );
+      await naverRun([
+        { ...naverBase, itemPrice: 1, shippingFee: 0, observedAt: at(1.5) },
+      ]);
+      const current = (
+        await rows(
+          `SELECT item_price,shipping_fee FROM retail_current_offers WHERE ${where}`,
+          [naverBase.externalProductId]
+        )
+      )[0];
+      assert.equal(Number(current.item_price), 99998);
+      assert.equal(Number(current.shipping_fee), 1001);
+    }
+  );
+  await check(
+    "Naver explicit stock-out, stale stock and recovery use the existing best-price view",
+    async () => {
+      assert.equal(
+        (
+          await naverRun([
+            {
+              ...naverBase,
+              availability: "OUT_OF_STOCK",
+              itemPrice: undefined,
+              shippingFee: undefined,
+              observedAt: at(4),
+            },
+          ])
+        ).matched,
+        1
+      );
+      let best = (
+        await rows(
+          "SELECT source,price FROM product_current_prices WHERE product_id=$1",
+          [createdId!]
+        )
+      )[0];
+      assert.equal(best.source, "GMARKET");
+      await naverRun([{ ...naverBase, observedAt: at(3.5) }]);
+      assert.equal(
+        (
+          await rows(
+            "SELECT source FROM product_current_prices WHERE product_id=$1",
+            [createdId!]
+          )
+        )[0].source,
+        "GMARKET"
+      );
+      await naverRun([{ ...naverBase, shippingFee: 200, observedAt: at(5) }]);
+      best = (
+        await rows(
+          "SELECT source,price FROM product_current_prices WHERE product_id=$1",
+          [createdId!]
+        )
+      )[0];
+      assert.equal(best.source, "NAVER");
+      assert.equal(Number(best.price), 100200);
+      const live = await readProductPage(
+        pool,
+        parseProductQuery(`/?view=live&ids=${createdId!}`)
+      );
+      assert.ok("prices" in live);
+      assert.equal(live.prices[0].price, 100200);
+    }
+  );
+  function naverNew(id: string) {
+    const url = `https://brand.naver.com/unit-brand/products/${id}`;
+    return input(id, {
+      source: "NAVER",
+      method: "CRAWL",
+      externalProductId: `unit-naver-${id}`,
+      url,
+      dataSource: url,
+    });
+  }
+  await check(
+    "Naver incomplete/unreviewed products hold once; only server-reviewed new products insert",
+    async () => {
+      const unreviewed = naverNew("9100"),
+        reviewed = naverNew("9101");
+      const before = await count("products");
+      assert.equal((await naverRun([unreviewed])).held, 1);
+      assert.equal((await naverRun([unreviewed])).held, 1);
+      assert.equal(
+        await count(
+          "retail_product_review_queue",
+          "source='NAVER' AND external_product_id=$1",
+          [unreviewed.externalProductId]
+        ),
+        1
+      );
+      assert.equal(
+        (await naverRun([{ ...unreviewed, model: undefined }])).held,
+        1
+      );
+      assert.equal(await count("products"), before);
+      assert.equal((await naverRun([reviewed], [review(reviewed)])).created, 1);
+      assert.equal(await count("products"), before + 1);
+      const invalid = naverNew("9102");
+      assert.equal(
+        (
+          await naverRun(
+            [{ ...invalid, shippingFee: undefined }],
+            [review(invalid)]
+          )
+        ).held,
+        1
+      );
+      assert.equal(
+        await count(
+          "retail_product_links",
+          "source='NAVER' AND external_product_id=$1",
+          [invalid.externalProductId]
+        ),
+        0
+      );
+    }
+  );
+  await check(
+    "Naver snapshot failure rolls back atomically without changing other sources or Danawa",
+    async () => {
+      const a = naverNew("9200"),
+        b = naverNew("9201");
+      await q(`CREATE FUNCTION fail_naver_snapshot() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      IF EXISTS(SELECT 1 FROM retail_product_links WHERE id=NEW.listing_id AND source='NAVER' AND external_product_id='unit-naver-9200') THEN RAISE EXCEPTION 'unit snapshot failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_naver_failure BEFORE INSERT ON retail_current_offers FOR EACH ROW EXECUTE FUNCTION fail_naver_snapshot();`);
+      try {
+        const result = await naverRun([a, b], [review(a), review(b)]);
+        assert.equal(result.failed, 1);
+        assert.equal(result.created, 1);
+        assert.equal(
+          await count(
+            "retail_product_links",
+            "source='NAVER' AND external_product_id=$1",
+            [a.externalProductId]
+          ),
+          0
+        );
+        assert.equal(
+          await count("products", "name=$1", [review(a).productName]),
+          0
+        );
+        assert.deepEqual(
+          await rows(
+            `SELECT o.* FROM retail_price_observations o JOIN retail_product_links l ON l.id=o.listing_id WHERE l.source<>'NAVER' ORDER BY o.listing_id,o.observed_at`
+          ),
+          otherRetailHistory
+        );
+        assert.deepEqual(
+          await rows("SELECT * FROM price_histories ORDER BY id"),
+          history
+        );
+        assert.deepEqual(
+          await rows("SELECT * FROM products WHERE id='danawa-existing'"),
+          originals
+        );
+      } finally {
+        await q(
+          "DROP TRIGGER test_naver_failure ON retail_current_offers; DROP FUNCTION fail_naver_snapshot();"
+        );
+      }
+    }
+  );
+  const discovery = (
+    price: number,
+    seller = "discovery-a",
+    observedAt = at(6)
+  ) =>
+    normalizeNaverDiscovery(
+      {
+        data: [
+          {
+            page: 1,
+            slots: [
+              {
+                data: {
+                  nvMid: "unit-shared-search-id",
+                  productNameOrg: "Discovery GPU",
+                  mallName: seller,
+                  productUrl: {
+                    pcUrl: `https://smartstore.naver.com/${seller}/products/123`,
+                  },
+                  salePrice: price,
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { observedAt, receivedAt: now.toISOString() }
+    ).candidates[0];
+  const vFor = (
+    c: ReturnType<typeof discovery>,
+    patch: Partial<NaverDiscoveryVerification> = {}
+  ) =>
+    discoveryVerification(c, {
+      reviewedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 3600000).toISOString(),
+      sellerId: c.sellerName!,
+      sellerProductId: "unit-channel-id",
+      identity: {
+        manufacturer: created.manufacturer!,
+        model: created.model!,
+        mpn: created.mpn,
+        variants: created.variants!,
+        distributor: created.distributor!,
+        warranty: created.warranty!,
+      },
+      ...patch,
+    });
+  const discoveryImport = (
+    candidates: ReturnType<typeof discovery>[],
+    checks: NaverDiscoveryVerification[] = [],
+    reviews: RetailProductReview[] = []
+  ) =>
+    importNaverDiscovery(
+      repository,
+      { info() {}, warn() {}, error() {} },
+      candidates,
+      {
+        now,
+        env: { RETAIL_NAVER_ENABLED: "true" },
+        verifications: checks,
+        reviews,
+        policies: {
+          NAVER: {
+            ...discoveryPolicy,
+            verifiedAt: at(-20),
+            expiresAt: new Date(now.getTime() + 3600000).toISOString(),
+          },
+        },
+      }
+    );
+  const candidate = discovery(80000),
+    verification = vFor(candidate, { itemPrice: 99000 });
+  const listingId = naverVerifiedListingId(verification);
+  await check(
+    "Discovery candidates hold once without listing or price writes and resolve only on verified promotion",
+    async () => {
+      const before = await count("retail_price_observations"),
+        productsBefore = await count("products");
+      assert.equal((await discoveryImport([candidate])).held, 1);
+      assert.equal((await discoveryImport([candidate])).held, 1);
+      assert.equal(
+        await count("retail_product_review_queue", "external_product_id=$1", [
+          candidate.candidateKey,
+        ]),
+        1
+      );
+      assert.equal(await count("retail_price_observations"), before);
+      assert.equal(await count("products"), productsBefore);
+      assert.equal(
+        (await discoveryImport([candidate], [verification])).matched,
+        1
+      );
+      assert.equal(await count("products"), productsBefore);
+      assert.equal(
+        await count(
+          "retail_product_review_queue",
+          "external_product_id=$1 AND resolved_at IS NOT NULL",
+          [candidate.candidateKey]
+        ),
+        1
+      );
+    }
+  );
+  await check(
+    "verified unknown shipping uses displayed price and preserves original amounts and public metadata",
+    async () => {
+      const saved = (
+        await rows(
+          `SELECT o.*,l.product_id FROM retail_price_observations o JOIN retail_product_links l ON l.id=o.listing_id WHERE l.source='NAVER' AND external_product_id=$1`,
+          [listingId]
+        )
+      )[0];
+      assert.equal(saved.product_id, createdId!);
+      assert.equal(Number(saved.item_price), 99000);
+      assert.equal(saved.shipping_fee, null);
+      assert.equal(Number(saved.displayed_price), 80000);
+      const current = (
+        await rows("SELECT * FROM product_current_prices WHERE product_id=$1", [
+          createdId!,
+        ])
+      )[0];
+      assert.equal(Number(current.price), 80000);
+      assert.equal(current.shipping_fee_known, false);
+      assert.equal(current.comparison_basis, "DISPLAYED_PRICE");
+      assert.equal(
+        current.offers.find((v: any) => v.source === "NAVER").shippingFee,
+        null
+      );
+      assert.equal(
+        current.offers.find((v: any) => v.source === "NAVER").comparisonPrice,
+        80000
+      );
+    }
+  );
+  await check(
+    "unknown-to-free-to-positive shipping creates immutable observations including equal-total one-won changes",
+    async () => {
+      for (const [minute, itemPrice, shippingFee] of [
+        [7, 80000, 0],
+        [8, 80000, 3000],
+        [8.25, 79999, 3001],
+      ]) {
+        const c = discovery(80000, "discovery-a", at(minute));
+        assert.equal(
+          (await discoveryImport([c], [vFor(c, { itemPrice, shippingFee })]))
+            .matched,
+          1
+        );
+        const snapshot = (
+          await rows(
+            "SELECT shipping_fee_known,price FROM product_current_prices WHERE product_id=$1",
+            [createdId!]
+          )
+        )[0];
+        assert.equal(snapshot.shipping_fee_known, true);
+        assert.equal(Number(snapshot.price), itemPrice + shippingFee);
+      }
+      const unchanged = discovery(80000, "discovery-a", at(8.25));
+      assert.equal(
+        (
+          await discoveryImport(
+            [unchanged],
+            [vFor(unchanged, { itemPrice: 79999, shippingFee: 3001 })]
+          )
+        ).updated,
+        0
+      );
+      assert.equal(
+        (
+          await discoveryImport(
+            [unchanged],
+            [vFor(unchanged, { itemPrice: 79999, shippingFee: 3002 })]
+          )
+        ).failed,
+        1
+      );
+      const stale = discovery(1, "discovery-a", at(6.5));
+      await discoveryImport([stale], [vFor(stale)]);
+      assert.equal(
+        Number(
+          (
+            await rows(
+              "SELECT price FROM product_current_prices WHERE product_id=$1",
+              [createdId!]
+            )
+          )[0].price
+        ),
+        83000
+      );
+      assert.equal(
+        await count(
+          "retail_price_observations",
+          "listing_id IN (SELECT id FROM retail_product_links WHERE external_product_id=$1)",
+          [listingId]
+        ),
+        5
+      );
+      assert.equal(
+        Number(
+          (
+            await rows(
+              "SELECT item_price FROM retail_price_observations WHERE listing_id IN (SELECT id FROM retail_product_links WHERE external_product_id=$1) ORDER BY observed_at LIMIT 1",
+              [listingId]
+            )
+          )[0].item_price
+        ),
+        99000
+      );
+    }
+  );
+  await check(
+    "same nvMid at a second seller never merges listings and the same comparison price drives API sorting",
+    async () => {
+      const b = discovery(70000, "discovery-b", at(8.5)),
+        vb = vFor(b);
+      assert.equal((await discoveryImport([b], [vb])).matched, 1);
+      assert.notEqual(naverVerifiedListingId(vb), listingId);
+      assert.equal(
+        await count(
+          "retail_product_links",
+          "external_product_id=ANY($1::text[])",
+          [[listingId, naverVerifiedListingId(vb)]]
+        ),
+        2
+      );
+      assert.equal(
+        (
+          await rows(
+            "SELECT url FROM product_current_prices WHERE product_id=$1",
+            [createdId!]
+          )
+        )[0].url,
+        vb.url
+      );
+      const detail = await readProductPage(
+        pool,
+        parseProductQuery(`/?view=detail&id=${createdId!}`)
+      );
+      assert.ok("products" in detail);
+      assert.equal(detail.products[0].currentPrice, 70000);
+      assert.equal(detail.products[0].currentPriceShippingFeeKnown, false);
+      assert.equal(
+        detail.products[0].currentPriceComparisonBasis,
+        "DISPLAYED_PRICE"
+      );
+      const live = await readProductPage(
+        pool,
+        parseProductQuery(`/?view=live&ids=${createdId!}`)
+      );
+      assert.ok("prices" in live);
+      assert.equal(live.prices[0].shippingFeeKnown, false);
+      const name = (
+        await rows("SELECT name FROM products WHERE id=$1", [createdId!])
+      )[0].name;
+      const list = await readProductPage(
+        pool,
+        parseProductQuery(
+          `/?view=category&category=GPU&sort=price-asc&q=${encodeURIComponent(name)}`
+        )
+      );
+      assert.ok("products" in list);
+      assert.equal(list.products[0].currentPrice, 70000);
+    }
+  );
+  await check(
+    "a verified unknown-shipping observation still cannot auto-register an unreviewed new identity",
+    async () => {
+      const c = discovery(60000, "discovery-new"),
+        v = vFor(c);
+      v.identity = {
+        ...v.identity,
+        model: "New Discovery Model",
+        mpn: "UNIT-NEW-DISCOVERY",
+      };
+      const before = await count("products");
+      assert.equal((await discoveryImport([c], [v])).held, 1);
+      assert.equal(await count("products"), before);
+      assert.equal(
+        (await discoveryImport([c], [v], [discoveryProductReview(v)])).created,
+        1
+      );
+      assert.equal(await count("products"), before + 1);
+      assert.equal(
+        (
+          await rows(
+            "SELECT shipping_fee FROM retail_price_observations WHERE listing_id IN (SELECT id FROM retail_product_links WHERE external_product_id=$1)",
+            [naverVerifiedListingId(v)]
+          )
+        )[0].shipping_fee,
+        null
+      );
+    }
+  );
+  await check(
+    "failed Discovery promotion rolls back price/product/queue resolution and preserves Danawa",
+    async () => {
+      const c = discovery(50000, "discovery-rollback"),
+        v = vFor(c);
+      v.identity = {
+        ...v.identity,
+        model: "Rollback Discovery",
+        mpn: "UNIT-ROLLBACK-DISCOVERY",
+      };
+      await discoveryImport([c]);
+      const before = await count("products");
+      await q(`CREATE FUNCTION fail_discovery_snapshot() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      IF EXISTS(SELECT 1 FROM retail_product_links WHERE id=NEW.listing_id AND external_product_id LIKE '%discovery-rollback%') THEN RAISE EXCEPTION 'unit failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_discovery_failure BEFORE INSERT ON retail_current_offers FOR EACH ROW EXECUTE FUNCTION fail_discovery_snapshot();`);
+      try {
+        assert.equal(
+          (await discoveryImport([c], [v], [discoveryProductReview(v)])).failed,
+          1
+        );
+        assert.equal(await count("products"), before);
+        assert.equal(
+          await count("retail_product_links", "external_product_id=$1", [
+            naverVerifiedListingId(v),
+          ]),
+          0
+        );
+        assert.equal(
+          await count(
+            "retail_product_review_queue",
+            "external_product_id=$1 AND resolved_at IS NULL",
+            [c.candidateKey]
+          ),
+          1
+        );
+        assert.deepEqual(
+          await rows("SELECT * FROM price_histories ORDER BY id"),
+          history
+        );
+        assert.deepEqual(
+          await rows("SELECT * FROM products WHERE id='danawa-existing'"),
+          originals
+        );
+        assert.equal(
+          await count(
+            "retail_price_observations",
+            "shipping_fee IS NULL AND displayed_price IS NULL AND availability='IN_STOCK'"
+          ),
+          0
+        );
+      } finally {
+        await q(
+          "DROP TRIGGER test_discovery_failure ON retail_current_offers; DROP FUNCTION fail_discovery_snapshot();"
+        );
+      }
     }
   );
   console.log(

@@ -1,8 +1,9 @@
 import { z } from "zod";
 import policies from "../../../config/retail-source-policies.json";
 import type { Retailer } from "../../../shared/retailPrices.js";
+import { validateNaverTargetUrl } from "./naverTarget.js";
 
-export type RetailCollectionMethod = "API" | "IMPORT";
+export type RetailCollectionMethod = "API" | "IMPORT" | "CRAWL";
 export type RetailSkipStatus =
   | "NOT_CONFIGURED"
   | "NOT_APPROVED"
@@ -17,7 +18,7 @@ export const retailEnabledEnvNames: Record<Retailer, string> = {
 // Reviewed policy metadata only; credentials stay in the server environment.
 const approvedPolicy = z.object({
   approvalStatus: z.literal("approved"),
-  methods: z.array(z.enum(["API", "IMPORT"])).min(1),
+  methods: z.array(z.enum(["API", "IMPORT", "CRAWL"])).min(1),
   apiAvailable: z.boolean().optional(),
   accessGranted: z.literal(true),
   thirdPartyProductsAllowed: z.literal(true),
@@ -34,6 +35,28 @@ const approvedPolicy = z.object({
   minDelayMs: z.number().int().min(1500),
   requiresFixedIp: z.boolean(),
   credentialEnvNames: z.array(z.string().regex(/^RETAIL_[A-Z0-9_]+$/)),
+  // Explicit source permission for reviewed offline Discovery artifacts. This
+  // is separate from HTML crawl approval and does not enable BFF HTTP access.
+  discovery: z
+    .object({
+      dataSources: z.array(z.string().url()).min(1).max(10),
+      accessGranted: z.literal(true),
+      evidence: z.string().trim().min(1),
+    })
+    .strict()
+    .optional(),
+  crawl: z
+    .object({
+      allowedUrls: z.array(z.string().url()).min(1).max(500),
+      automaticAccessAllowed: z.literal(true),
+      robotsVerified: z.literal(true),
+      parserVerified: z.literal(true),
+      databaseVerified: z.literal(true),
+      environmentVerified: z.literal(true),
+      evidence: z.string().trim().min(1),
+    })
+    .strict()
+    .optional(),
 });
 export type RetailPolicy = z.infer<typeof approvedPolicy>;
 export type RetailPolicies = Partial<Record<Retailer, unknown>>;
@@ -46,6 +69,7 @@ export function checkRetailPolicy(
     policies?: RetailPolicies;
     env?: NodeJS.ProcessEnv;
     now?: Date;
+    url?: string;
   } = {}
 ): { allowed: true; policy: RetailPolicy } | { allowed: false; code: string } {
   const parsed = approvedPolicy.safeParse(
@@ -63,6 +87,18 @@ export function checkRetailPolicy(
   // No verified fixed-IP execution path currently exists, including Actions.
   if (policy.requiresFixedIp)
     return { allowed: false, code: "FIXED_IP_REQUIRED" };
+  if (method === "CRAWL") {
+    // No other retailer's historical HTML path is re-enabled by this method.
+    if (source !== "NAVER" || !policy.crawl)
+      return { allowed: false, code: "CRAWL_NOT_APPROVED" };
+    try {
+      const url = validateNaverTargetUrl(options.url ?? "");
+      if (!policy.crawl.allowedUrls.includes(url.href))
+        return { allowed: false, code: "CRAWL_TARGET_NOT_APPROVED" };
+    } catch {
+      return { allowed: false, code: "CRAWL_TARGET_NOT_APPROVED" };
+    }
+  }
   if (method === "API" && policy.apiAvailable !== true)
     return { allowed: false, code: "API_NOT_VERIFIED" };
   const env = options.env ?? process.env;
@@ -85,6 +121,7 @@ export function checkRetailExecution(
     policies?: RetailPolicies;
     env?: NodeJS.ProcessEnv;
     now?: Date;
+    url?: string;
   }
 ):
   | { allowed: true; policy: RetailPolicy }
@@ -109,7 +146,10 @@ export function checkRetailExecution(
   if (!options.adapterConfigured)
     return {
       allowed: false,
-      code: "API_ADAPTER_NOT_CONFIGURED",
+      code:
+        options.method === "CRAWL"
+          ? "NAVER_PRODUCT_HTML_UNVERIFIED"
+          : "API_ADAPTER_NOT_CONFIGURED",
       status: "UNSUPPORTED",
     };
   return access;
