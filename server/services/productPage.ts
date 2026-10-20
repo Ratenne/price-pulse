@@ -88,7 +88,7 @@ interface SummaryRow {
   name: string;
   category: ProductCategory;
   source_url: string | null;
-  external_product_id: string;
+  external_product_id: string | null;
   low: number | null;
   high: number | null;
   average: number | null;
@@ -199,7 +199,9 @@ function toProduct(row: SummaryRow, currentMonth: string): Product {
       modelName: row.name,
       displayName: row.name,
       imageUrl: PRODUCT_CATEGORIES[row.category].imageUrl,
-      tags: ["다나와 월별 최저가"],
+      tags: [
+        row.external_product_id ? "다나와 월별 최저가" : "판매처 실관측 가격",
+      ],
       currentPrice: null,
       previousPrice: row.previous,
       changeAmount: 0,
@@ -354,9 +356,9 @@ async function readSnapshotPrices(
   }>(
     `SELECT p.id,CASE WHEN ${FRESH_SNAPSHOT} THEN cp.price::float8 END AS price,
      to_char(cp.checked_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS checked_at
-     FROM products p JOIN product_source_mappings m ON m.product_id=p.id AND m.source='DANAWA'
+     FROM products p LEFT JOIN product_source_mappings m ON m.product_id=p.id AND m.source='DANAWA'
      LEFT JOIN product_current_prices cp ON cp.product_id=p.id
-     WHERE p.id=ANY($1::text[]) AND m.source_url LIKE 'https://prod.danawa.com/info/%'`,
+     WHERE p.id=ANY($1::text[]) AND (m.source_url LIKE 'https://prod.danawa.com/info/%' OR m.product_id IS NULL)`,
     [ids]
   );
   return {

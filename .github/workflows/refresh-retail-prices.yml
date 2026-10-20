@@ -1,8 +1,7 @@
 name: Refresh Retail Prices
 
 on:
-  schedule:
-    - cron: "27 */3 * * *" # KST 00:27,03:27,...21:27
+  # Automatic collection paused until a provider and its execution policy are approved.
   workflow_dispatch:
 
 permissions:
@@ -29,3 +28,9 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_SSL: "true"
           RETAIL_BATCH_LIMIT: "100"
+          # Repository variables opt in; they do not replace the reviewed policy.
+          RETAIL_11ST_ENABLED: ${{ vars.RETAIL_11ST_ENABLED || 'false' }}
+          RETAIL_COUPANG_ENABLED: ${{ vars.RETAIL_COUPANG_ENABLED || 'false' }}
+          RETAIL_GMARKET_ENABLED: ${{ vars.RETAIL_GMARKET_ENABLED || 'false' }}
+          RETAIL_AUCTION_ENABLED: ${{ vars.RETAIL_AUCTION_ENABLED || 'false' }}
+          RETAIL_NAVER_ENABLED: ${{ vars.RETAIL_NAVER_ENABLED || 'false' }}
