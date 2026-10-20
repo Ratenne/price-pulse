@@ -1,10 +1,11 @@
 import type { Product } from "../client/src/domain/product";
 import type { ProductCategory } from "../client/src/domain/category";
+import { hasPriceAnalysis } from "./priceAnalysis";
 
 export interface CatalogSummary {
   category: ProductCategory;
   productCount: number;
-  averageRangeRate: number;
+  averageRangeRate: number | null;
   nearLowestCount: number | null;
 }
 export interface ProductPage {
@@ -23,6 +24,17 @@ export function applyCurrentPrice(
   price: number | null,
   checkedAt?: string
 ): Product {
+  if (!hasPriceAnalysis(product))
+    return {
+      ...product,
+      currentPrice: price,
+      currentPriceCheckedAt: checkedAt,
+      priceStatus: "INSUFFICIENT_DATA",
+      currentPositionRate: null,
+      lowestPriceDifferenceRate: null,
+      changeAmount: null,
+      changeRate: null,
+    };
   const range = product.priceRangeAmount;
   const position =
     price === null
@@ -33,8 +45,14 @@ export function applyCurrentPrice(
             Math.min(100, ((price - product.sixMonthLowPrice) / range) * 100)
           )
         : 50;
-  const changeAmount = price === null ? 0 : price - product.previousPrice;
-  const changeRate = (changeAmount / product.previousPrice) * 100;
+  const changeAmount =
+    price === null || product.previousPrice === null
+      ? null
+      : price - product.previousPrice;
+  const changeRate =
+    changeAmount === null || !product.previousPrice
+      ? null
+      : (changeAmount / product.previousPrice) * 100;
   return {
     ...product,
     currentPrice: price,
@@ -47,7 +65,11 @@ export function applyCurrentPrice(
         ? 0
         : ((price - product.sixMonthLowPrice) / product.sixMonthLowPrice) * 100,
     recentTrend:
-      changeRate >= 1 ? "RISING" : changeRate <= -1 ? "FALLING" : "STABLE",
+      changeRate !== null && changeRate >= 1
+        ? "RISING"
+        : changeRate !== null && changeRate <= -1
+          ? "FALLING"
+          : "STABLE",
     priceStatus:
       price === null
         ? "UNKNOWN"

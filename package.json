@@ -11,6 +11,7 @@
     "backfill:danawa:bulk": "node dist/scripts/bulkBackfillDanawa.js",
     "refresh:danawa": "tsx server/scripts/refreshDanawa.ts",
     "refresh:live": "tsx server/scripts/refreshLivePrices.ts",
+    "refresh:retail": "tsx server/scripts/refreshRetailPrices.ts",
     "start": "NODE_ENV=production node dist/index.js",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",

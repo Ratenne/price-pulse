@@ -8,6 +8,7 @@ import { DanawaRequestPolicy } from "../integrations/danawa/danawaRequestPolicy"
 import { consoleLogger } from "../logging/logger";
 import { PgPriceHistoryRepository } from "../repositories/priceHistoryRepository";
 import { PgProductRepository } from "../repositories/productRepository";
+import { PgLivePriceSnapshotRepository } from "../repositories/livePriceSnapshotRepository";
 import { DanawaBulkBackfillService } from "../services/danawaBulkBackfillService";
 
 async function main(): Promise<void> {
@@ -28,7 +29,8 @@ async function main(): Promise<void> {
     ),
     new PgPriceHistoryRepository(pool),
     consoleLogger,
-    config
+    config,
+    new PgLivePriceSnapshotRepository(pool)
   );
   const summary = await service.run(DANAWA_GPU_CATEGORY);
   console.log(
@@ -37,8 +39,7 @@ async function main(): Promise<void> {
   if (
     summary.failedPages > 0 ||
     summary.failedProducts > 0 ||
-    (config.targetHistoricalRowCount > 0 && !summary.targetReached) ||
-    (config.targetHistoricalRowCount === 0 && summary.successfulProducts === 0)
+    summary.currentPriceFailures > 0
   )
     process.exitCode = 2;
 }

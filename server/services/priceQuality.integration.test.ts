@@ -19,6 +19,8 @@ describe.skipIf(process.env.PRICEPULSE_DB_TESTS !== "true")(
       CREATE TEMP TABLE products (LIKE public.products INCLUDING ALL);
       CREATE TEMP TABLE product_source_mappings (LIKE public.product_source_mappings INCLUDING ALL);
       CREATE TEMP TABLE price_histories (LIKE public.price_histories INCLUDING ALL);
+      CREATE TEMP TABLE price_observations (LIKE public.price_observations INCLUDING ALL);
+      CREATE TEMP TABLE price_collection_status (LIKE public.price_collection_status INCLUDING ALL);
       INSERT INTO products (id,name,category) VALUES
         ('danawa-101546711','Reviewed GPU','GPU'), ('danawa-control','Unreviewed GPU','GPU');
       INSERT INTO product_source_mappings (product_id,source,external_product_id,source_url) VALUES
@@ -46,6 +48,13 @@ describe.skipIf(process.env.PRICEPULSE_DB_TESTS !== "true")(
         )
         .replaceAll("CREATE OR REPLACE VIEW", "CREATE OR REPLACE TEMP VIEW");
       await client.query(migration);
+      // This suite isolates reviewed monthly history; shadow the current-price
+      // view too, so it cannot read real products through the public view.
+      await client.query(`CREATE TEMP VIEW product_current_prices AS
+        SELECT p.id AS product_id,p.current_price AS price,p.current_price_checked_at AS checked_at,
+          'DANAWA'::text AS source,m.source_url AS url,'[]'::jsonb AS offers
+        FROM products p JOIN product_source_mappings m ON m.product_id=p.id AND m.source='DANAWA'
+        WHERE p.current_price>0 AND p.current_price_checked_at>now()-interval '12 hours'`);
     });
     afterAll(async () => {
       if (client) {
@@ -61,7 +70,7 @@ describe.skipIf(process.env.PRICEPULSE_DB_TESTS !== "true")(
       expect(raw.rows).toEqual([{ price: 1 }]);
       const result = await readProductPage(
         client as unknown as Pool,
-        parseProductQuery("/?view=home"),
+        parseProductQuery("/?view=rankings&period=under-six-months"),
         new Date("2026-10-15T00:00:00Z")
       );
       if (!("products" in result)) throw new Error("Expected products");
@@ -112,7 +121,7 @@ describe.skipIf(process.env.PRICEPULSE_DB_TESTS !== "true")(
         await client.query("ROLLBACK TO SAVEPOINT correction");
       }
     });
-    it("omits products with no usable history from ranking and category summaries", async () => {
+    it("excludes products with no usable history from ranking but preserves the catalog count", async () => {
       await client.query("SAVEPOINT all_excluded");
       try {
         await client.query(`INSERT INTO price_history_exclusions (price_history_id,observed_price,reason)
@@ -120,14 +129,14 @@ describe.skipIf(process.env.PRICEPULSE_DB_TESTS !== "true")(
           ON CONFLICT DO NOTHING`);
         const result = await readProductPage(
           client as unknown as Pool,
-          parseProductQuery("/?view=rankings"),
+          parseProductQuery("/?view=rankings&period=under-six-months"),
           new Date("2026-10-15T00:00:00Z")
         );
         expect("products" in result && result.products.map(p => p.id)).toEqual([
           "danawa-control",
         ]);
         expect("summaries" in result && result.summaries[0].productCount).toBe(
-          1
+          2
         );
       } finally {
         await client.query("ROLLBACK TO SAVEPOINT all_excluded");

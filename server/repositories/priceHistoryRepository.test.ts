@@ -21,7 +21,7 @@ describe("buildPriceHistoryChangeSet", () => {
     expect(result).toEqual({ inserts: [], updates: [], skippedCount: 1 });
   });
 
-  it("updates an existing month when Danawa changes the historical price", () => {
+  it("preserves an existing month when a later response changes its price", () => {
     const changed = monthly("2026-07", 26_000);
     const result = buildPriceHistoryChangeSet(
       [{ priceYearMonth: "2026-07", price: 25_940 }],
@@ -30,8 +30,8 @@ describe("buildPriceHistoryChangeSet", () => {
 
     expect(result).toEqual({
       inserts: [],
-      updates: [changed],
-      skippedCount: 0,
+      updates: [],
+      skippedCount: 1,
     });
   });
 

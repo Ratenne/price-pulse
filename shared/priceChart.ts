@@ -8,8 +8,27 @@ export function buildPriceChartData(product: Product) {
     .filter(point => !excluded.has(point.date.slice(0, 7)))
     .map(point => ({ date: point.date.slice(0, 7), price: point.price }));
   excluded.forEach(date => data.push({ date, price: null }));
+  for (const point of product.observedPriceHistory ?? [])
+    data.push({ ...point });
   if (product.currentPrice !== null && product.currentPriceMonth) {
-    data.push({ date: product.currentPriceMonth, price: product.currentPrice });
+    const date =
+      product.observedPriceHistory?.length && product.currentPriceCheckedAt
+        ? product.currentPriceCheckedAt
+        : product.currentPriceMonth;
+    if (
+      !data.some(
+        point =>
+          point.price === product.currentPrice &&
+          point.date.length > 7 &&
+          date.length > 7 &&
+          Date.parse(point.date) === Date.parse(date)
+      )
+    )
+      data.push({ date, price: product.currentPrice });
   }
-  return data.sort((a, b) => a.date.localeCompare(b.date));
+  return data.sort((a, b) =>
+    a.date.length > 7 && b.date.length > 7
+      ? Date.parse(a.date) - Date.parse(b.date)
+      : a.date.localeCompare(b.date)
+  );
 }

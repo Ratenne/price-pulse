@@ -1,16 +1,24 @@
 import { getDatabasePool, closeDatabasePool } from "../config/database.js";
-import { fetchLivePrices } from "../integrations/danawa/danawaLivePrices.js";
+import {
+  fetchLivePrices,
+  readSelectedLivePrices,
+} from "../integrations/danawa/danawaLivePrices.js";
 import { PgLivePriceSnapshotRepository } from "../repositories/livePriceSnapshotRepository.js";
 import { refreshLivePriceSnapshot } from "../services/livePriceSnapshot.js";
 import { consoleLogger } from "../logging/logger.js";
 
 async function main() {
+  const repository = new PgLivePriceSnapshotRepository(getDatabasePool());
+  const missing = process.argv.includes("--missing-history")
+    ? await repository.findProductsWithoutHistory()
+    : undefined;
   const summary = await refreshLivePriceSnapshot(
-    () => fetchLivePrices(),
-    new PgLivePriceSnapshotRepository(getDatabasePool()),
-    consoleLogger
+    () => (missing ? readSelectedLivePrices(missing) : fetchLivePrices()),
+    repository,
+    consoleLogger,
+    missing?.map(p => p.external_product_id)
   );
-  if (summary.updated === 0) process.exitCode = 1;
+  if (summary.failed > 0) process.exitCode = 2;
 }
 main()
   .catch(error => {

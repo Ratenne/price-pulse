@@ -4,6 +4,7 @@ export interface DiscoveredProduct {
   category: string;
   sourceUrl: string;
   currentMinPrice?: number;
+  observedAt?: string;
   registeredYearMonth?: string;
 }
 

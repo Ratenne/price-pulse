@@ -1,6 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 import { fetchLivePrices, readSelectedLivePrices } from "./danawaLivePrices";
 describe("read-only live prices", () => {
+  it("deduplicates selected product codes and exposes HTTP failures for batch reporting", async () => {
+    const fetchPage = vi.fn().mockRejectedValue(new Error("network"));
+    const product = { external_product_id: "123", name: "GPU" };
+    const result = await readSelectedLivePrices([product, product], {
+      fetchPage,
+    });
+    expect(fetchPage).toHaveBeenCalledOnce();
+    expect(result.prices.size).toBe(0);
+    expect(result.failures?.get("123")).toBe("NETWORK_OR_RESPONSE");
+  });
   it("searches only selected products and matches productCode rather than taking an unrelated result", async () => {
     const fetchPage = vi.fn(async () => ({
       page: 1,

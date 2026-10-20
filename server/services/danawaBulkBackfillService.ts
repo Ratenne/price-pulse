@@ -11,6 +11,11 @@ import type { PriceHistoryRepository } from "../repositories/priceHistoryReposit
 import type { ProductRepository } from "../repositories/productRepository";
 import { koreaYearMonth } from "../domain/priceCalendar";
 import { DanawaIntegrationError } from "../integrations/danawa/danawaErrors";
+import type { LivePriceSnapshotRepository } from "../repositories/livePriceSnapshotRepository";
+import {
+  completedHistoricalCollection,
+  collectionFailure,
+} from "../domain/priceCollection";
 
 export interface DanawaBulkBackfillProgress {
   currentPage: number;
@@ -21,6 +26,9 @@ export interface DanawaBulkBackfillProgress {
   processedProducts: number;
   successfulProducts: number;
   failedProducts: number;
+  noSourceDataProducts: number;
+  insufficientHistoryProducts: number;
+  currentPriceFailures: number;
   failedPages: number;
   insertedPrices: number;
   updatedPrices: number;
@@ -57,14 +65,17 @@ export class DanawaBulkBackfillService {
     private readonly collector: HistoricalPriceCollector,
     private readonly priceHistories: PriceHistoryRepository,
     private readonly logger: Logger,
-    private readonly config: DanawaBulkBackfillConfig
+    private readonly config: DanawaBulkBackfillConfig,
+    private readonly currentPrices?: Pick<
+      LivePriceSnapshotRepository,
+      "applyPrices" | "recordUnobserved"
+    >
   ) {}
 
   async run(
     category: DanawaCategoryMapping,
     now = new Date()
   ): Promise<DanawaBulkBackfillProgress> {
-    const currentMonth = koreaYearMonth(now);
     const seenProductCodes = new Set<string>();
     const progress: DanawaBulkBackfillProgress = {
       currentPage: 0,
@@ -75,6 +86,9 @@ export class DanawaBulkBackfillService {
       processedProducts: 0,
       successfulProducts: 0,
       failedProducts: 0,
+      noSourceDataProducts: 0,
+      insufficientHistoryProducts: 0,
+      currentPriceFailures: 0,
       failedPages: 0,
       insertedPrices: 0,
       updatedPrices: 0,
@@ -137,7 +151,7 @@ export class DanawaBulkBackfillService {
         await processWithConcurrency(
           batch,
           this.config.maxConcurrency,
-          product => this.processProduct(product, progress, currentMonth)
+          product => this.processProduct(product, progress, now)
         );
       }
 
@@ -157,22 +171,45 @@ export class DanawaBulkBackfillService {
   private async processProduct(
     product: DiscoveredProduct,
     progress: DanawaBulkBackfillProgress,
-    currentMonth: string
+    now: Date
   ): Promise<void> {
     const upsert = await this.products.upsertDanawaProduct(product);
     if (upsert.inserted) progress.insertedProducts += 1;
     progress.processedProducts += 1;
+
+    if (this.currentPrices) {
+      if (product.currentMinPrice !== undefined && product.observedAt) {
+        await this.currentPrices.applyPrices(
+          new Map([[product.externalProductId, product.currentMinPrice]]),
+          product.observedAt
+        );
+      } else {
+        progress.currentPriceFailures++;
+        await this.currentPrices.recordUnobserved(
+          [],
+          new Date().toISOString(),
+          "CURRENT_PRICE_NOT_PROVIDED",
+          [product.externalProductId]
+        );
+      }
+    }
 
     let collection;
     try {
       collection = await this.collector.collect(product.externalProductId);
     } catch (error) {
       progress.failedProducts += 1;
+      await this.priceHistories.recordStatus(upsert.productId, {
+        status: "COLLECTION_FAILED",
+        reason: collectionFailure(error),
+        checkedAt: new Date().toISOString(),
+      });
       this.logger.warn("Danawa product historical collection failed", {
         source: PRICE_SOURCE.DANAWA,
         externalProductId: product.externalProductId,
         exceptionType: error instanceof Error ? error.name : typeof error,
         errorMessage: error instanceof Error ? error.message : String(error),
+        failureStage: collectionFailure(error),
         ...(error instanceof DanawaIntegrationError
           ? {
               failureStage: error.stage,
@@ -185,29 +222,49 @@ export class DanawaBulkBackfillService {
       return;
     }
 
-    const completed = collection.prices.filter(
-      price => price.priceYearMonth < currentMonth
-    );
-    if (!completed.length) {
-      progress.failedProducts += 1;
-      this.logger.warn("Danawa product has no completed historical prices", {
+    const resultStatus = completedHistoricalCollection(collection, now);
+    if (!resultStatus.prices.length) {
+      const context = {
         source: PRICE_SOURCE.DANAWA,
         externalProductId: product.externalProductId,
         reason: "NO_COMPLETED_MONTHLY_PRICES",
         collectedPrices: collection.prices.length,
-        collectedYearMonths: collection.prices.map(price => price.priceYearMonth),
+        collectedYearMonths: collection.prices.map(
+          price => price.priceYearMonth
+        ),
         selectedPeriod: collection.selectedPeriod,
         invalidPrices: collection.invalidCount,
-        currentMonth,
-      });
-      return;
+        currentMonth: koreaYearMonth(now),
+        collectionStatus: resultStatus.status,
+        classificationReason: resultStatus.reason,
+      };
+      if (resultStatus.status === "COLLECTION_FAILED") {
+        this.logger.warn(
+          "Danawa product has no completed historical prices",
+          context
+        );
+      } else {
+        this.logger.info(
+          "Danawa product has no completed historical prices",
+          context
+        );
+      }
     }
     const writeResult = await this.priceHistories.saveMonthlyPrices(
       upsert.productId,
       PRICE_SOURCE.DANAWA,
-      completed
+      resultStatus.prices
     );
-    progress.successfulProducts += 1;
+    await this.priceHistories.recordStatus(upsert.productId, {
+      ...resultStatus,
+      checkedAt: new Date().toISOString(),
+    });
+    if (resultStatus.status === "COLLECTION_FAILED") progress.failedProducts++;
+    else progress.successfulProducts++;
+    if (resultStatus.status === "NO_SOURCE_DATA")
+      progress.noSourceDataProducts++;
+    if (resultStatus.status === "INSUFFICIENT_HISTORY")
+      progress.insufficientHistoryProducts++;
     progress.insertedPrices += writeResult.insertedCount;
     progress.updatedPrices += writeResult.updatedCount;
     progress.skippedPrices += writeResult.skippedCount;

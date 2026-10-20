@@ -31,7 +31,7 @@ async function main() {
     new PgPriceHistoryRepository(pool),
     consoleLogger
   );
-  if (summary.successful === 0) process.exitCode = 1;
+  if (summary.failed > 0) process.exitCode = 2;
 }
 main()
   .catch(error => {

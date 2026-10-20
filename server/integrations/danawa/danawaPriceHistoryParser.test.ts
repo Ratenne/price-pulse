@@ -5,6 +5,36 @@ import { parseDanawaMonthlyPrices } from "./danawaPriceHistoryParser";
 describe("parseDanawaMonthlyPrices", () => {
   const logger = { warn: vi.fn() };
 
+  it("recognizes coherent explicit zero-count monthly periods without result arrays", () => {
+    expect(
+      parseDanawaMonthlyPrices(
+        { "24": { count: 0 }, "12": { count: 0 }, "6": { count: 0 } },
+        logger
+      )
+    ).toMatchObject({ prices: [], availability: "NO_SOURCE_DATA" });
+  });
+
+  it.each([
+    {},
+    { error: "blocked" },
+    { "24": { count: 24 }, "12": { count: 12 }, "6": { count: 6 } },
+    { "24": { count: 0 }, "12": { count: 0 }, "6": { count: 1 } },
+    { "24": { count: 0 }, "12": { count: 0 }, "6": { count: 0, result: null } },
+    {
+      "24": { count: 0 },
+      "12": { count: 0 },
+      "6": { count: 0 },
+      error: "blocked",
+    },
+  ])(
+    "does not infer source absence from ambiguous or inconsistent response %j",
+    response => {
+      expect(() => parseDanawaMonthlyPrices(response, logger)).toThrow(
+        DanawaIntegrationError
+      );
+    }
+  );
+
   it("maps a valid monthly result to internal prices", () => {
     const result = parseDanawaMonthlyPrices(
       {

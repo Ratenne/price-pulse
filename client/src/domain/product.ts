@@ -1,4 +1,5 @@
 import type { ProductCategory } from "./category";
+import type { RetailOffer } from "../../../shared/retailPrices";
 
 export type PriceTrend = "RISING" | "FALLING" | "STABLE";
 
@@ -9,6 +10,7 @@ export type PriceStatus =
   | "HIGH"
   | "VERY_HIGH"
   | "UNKNOWN"
+  | "INSUFFICIENT_DATA"
   | "LOADING";
 
 export interface PriceHistoryPoint {
@@ -17,18 +19,36 @@ export interface PriceHistoryPoint {
 }
 
 export interface PriceSummary {
-  sixMonthLowPrice: number;
-  sixMonthHighPrice: number;
-  sixMonthAveragePrice: number;
-  priceRangeAmount: number;
-  priceRangeRate: number;
-  currentPositionRate: number;
-  lowestPriceDifferenceRate: number;
+  sixMonthLowPrice: number | null;
+  sixMonthHighPrice: number | null;
+  sixMonthAveragePrice: number | null;
+  priceRangeAmount: number | null;
+  priceRangeRate: number | null;
+  currentPositionRate: number | null;
+  lowestPriceDifferenceRate: number | null;
 }
 
 export interface FairPriceRange {
-  fairPriceMin: number;
-  fairPriceMax: number;
+  fairPriceMin: number | null;
+  fairPriceMax: number | null;
+}
+
+export interface PriceAnalysis {
+  comparable: boolean;
+  observationCount: number;
+  rankingPeriod: "SIX_MONTHS" | "UNDER_SIX_MONTHS" | "INSUFFICIENT";
+  dataStatus:
+    | "NORMAL"
+    | "INSUFFICIENT_HISTORY"
+    | "NO_SOURCE_DATA"
+    | "COLLECTION_FAILED";
+  monthlyCount: number;
+  firstHistoryMonth: string | null;
+  lastHistoryMonth: string | null;
+  firstObservedAt: string | null;
+  lastObservedAt: string | null;
+  coverageFirstObservedAt: string | null;
+  coverageLastObservedAt: string | null;
 }
 
 export interface Product extends PriceSummary, FairPriceRange {
@@ -40,9 +60,9 @@ export interface Product extends PriceSummary, FairPriceRange {
   imageUrl: string;
   tags: string[];
   currentPrice: number | null;
-  previousPrice: number;
-  changeAmount: number;
-  changeRate: number;
+  previousPrice: number | null;
+  changeAmount: number | null;
+  changeRate: number | null;
   recentTrend: PriceTrend;
   priceStatus: PriceStatus;
   priceHistory: PriceHistoryPoint[];
@@ -52,6 +72,11 @@ export interface Product extends PriceSummary, FairPriceRange {
   latestHistoryMonth?: string;
   currentPriceCheckedAt?: string;
   currentPriceMonth?: string;
+  currentPriceSource?: RetailOffer["source"];
+  currentPriceUrl?: string;
+  offers?: RetailOffer[];
+  analysis?: PriceAnalysis;
+  observedPriceHistory?: PriceHistoryPoint[];
 }
 
 export interface ProductSeed {

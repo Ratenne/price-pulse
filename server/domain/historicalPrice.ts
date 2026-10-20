@@ -12,6 +12,7 @@ export interface HistoricalPrice {
 }
 
 export interface HistoricalPriceCollection {
+  availability?: "NO_SOURCE_DATA";
   prices: HistoricalPrice[];
   receivedCount: number;
   invalidCount: number;

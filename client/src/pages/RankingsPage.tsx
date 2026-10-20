@@ -48,6 +48,14 @@ export default function RankingsPage() {
     initial.category
   );
   const [sort, setSort] = useState<ProductSort>(initial.sort);
+  const [period, setPeriod] = useState(() => {
+    const value = new URLSearchParams(window.location.search).get("period");
+    return value === "under-six-months" || value === "all"
+      ? value
+      : initial.sort === "range" || value === "six-months"
+        ? "six-months"
+        : "all";
+  });
   const [currentPage, setCurrentPage] = useState(initial.page);
   const [query, setQuery] = useState(
     () => new URLSearchParams(window.location.search).get("q") || ""
@@ -63,6 +71,7 @@ export default function RankingsPage() {
     sort,
     page: String(currentPage),
     q: debouncedQuery,
+    period,
   });
   if (category !== "ALL") request.set("category", category);
   const state = useProductPage(request.toString());
@@ -91,12 +100,13 @@ export default function RankingsPage() {
     if (query.trim()) params.set("q", query.trim());
     params.set("sort", sort);
     params.set("page", String(currentPage));
+    params.set("period", period);
     window.history.replaceState(
       null,
       "",
       `${window.location.pathname}?${params.toString()}`
     );
-  }, [category, currentPage, query, sort]);
+  }, [category, currentPage, query, sort, period]);
 
   const updateCategory = (nextCategory: ProductCategory | "ALL") => {
     setCategory(nextCategory);
@@ -118,6 +128,29 @@ export default function RankingsPage() {
         />
         <section className="container discovery-section" id="rankings-section">
           <div className="ranking-controls">
+            <fieldset>
+              <legend>관측 기간</legend>
+              <div className="chip-group">
+                {[
+                  ["six-months", "6개월 이상"],
+                  ["under-six-months", "6개월 미만"],
+                  ["all", "전체 상품"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className="filter-chip"
+                    aria-pressed={period === value}
+                    onClick={() => {
+                      setPeriod(value);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
             <fieldset>
               <legend>카테고리</legend>
               <div className="chip-group">
@@ -191,6 +224,11 @@ export default function RankingsPage() {
             <ProductList
               products={pageProducts}
               offset={(pagination.currentPage - 1) * ITEMS_PER_PAGE}
+              rangeLabel={
+                period === "six-months" ? "6개월 변동폭" : "관측 기간 변동폭"
+              }
+              showObservationPeriod={period !== "six-months"}
+              ranked={period !== "all"}
             />
           ) : !state.loading && !state.error ? (
             <div className="empty-state">

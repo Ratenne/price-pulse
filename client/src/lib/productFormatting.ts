@@ -1,4 +1,5 @@
 import type { PriceStatus, Product } from "@/domain/product";
+import { hasPriceAnalysis } from "@shared/priceAnalysis";
 
 export const PRICE_STATUS_LABELS: Record<PriceStatus, string> = {
   VERY_LOW: "최저가 근접",
@@ -8,6 +9,7 @@ export const PRICE_STATUS_LABELS: Record<PriceStatus, string> = {
   VERY_HIGH: "최고가 근접",
   UNKNOWN: "현재가 조회 불가",
   LOADING: "현재가 확인 중",
+  INSUFFICIENT_DATA: "데이터 부족",
 };
 
 export function formatPrice(price: number | null): string {
@@ -20,11 +22,13 @@ export function formatCurrentPrice(product: Product): string {
     : formatPrice(product.currentPrice);
 }
 
-export function formatRate(rate: number): string {
+export function formatRate(rate: number | null): string {
+  if (rate === null) return "데이터 부족";
   return `${rate.toFixed(1)}%`;
 }
 
 export function getNearLowestMessage(product: Product): string | null {
+  if (!hasPriceAnalysis(product)) return null;
   if (product.currentPrice === null) return null;
   if (product.currentPrice > product.sixMonthLowPrice * 1.1) return null;
   if (product.recentTrend === "RISING") {
@@ -34,6 +38,7 @@ export function getNearLowestMessage(product: Product): string | null {
 }
 
 export function getBuyerPerspective(product: Product): string[] {
+  if (!hasPriceAnalysis(product)) return ["데이터 부족"];
   if (product.priceStatus === "LOADING")
     return [
       "현재 판매 가격을 확인 중입니다. 과거 가격 기록을 먼저 확인할 수 있습니다.",
@@ -60,6 +65,7 @@ export function getBuyerPerspective(product: Product): string[] {
 }
 
 export function getSellerPerspective(product: Product): string[] {
+  if (!hasPriceAnalysis(product)) return ["데이터 부족"];
   if (product.priceStatus === "LOADING")
     return ["현재 판매 가격을 확인 중입니다."];
   if (product.currentPrice === null)

@@ -28,7 +28,12 @@ export default function Dashboard({
           />
         )}
         <CategoryShortcuts summaries={data.summaries} />
-        <PriceRangeRanking products={topProducts} />
+        <PriceRangeRanking
+          products={topProducts}
+          loading={loading}
+          error={error}
+        />
+        <PriceRangeRanking products={[]} period="under-six-months" />
         <section className="discovery-section low-price-section">
           <div className="container">
             <div className="section-heading">
@@ -54,9 +59,13 @@ export default function Dashboard({
           </Link>
         </section>
         <p className="container data-notice">
-          다나와 {data.total}개 상품 · 지난달까지의 월별 최저가는 주 1회
-          갱신합니다. 현재 가격은 화면 조회 시 다나와에서 확인하며 DB에 저장하지
-          않습니다.
+          {data.summaries.reduce(
+            (total, summary) => total + summary.productCount,
+            0
+          )}
+          개 상품 · 다나와 월별 이력은 3시간마다 수집합니다. 현재가는 저장된
+          수집 결과이며 12시간이 지나면 표시하지 않습니다. 배송비가 확인된
+          판매처의 최저가를 우선하고, 없으면 다나와 참고가를 표시합니다.
         </p>
       </main>
       <SiteFooter />

@@ -26,6 +26,9 @@ export default function CategoriesPage() {
   const state = useProductPage(
     `view=category&category=${category}&page=${page}`
   );
+  const ranking = useProductPage(
+    `view=rankings&period=six-months&category=${category}`
+  );
   const definition = PRODUCT_CATEGORIES[category];
   const products = state.data.products;
   const summary = state.data.summaries.find(s => s.category === category);
@@ -69,7 +72,7 @@ export default function CategoriesPage() {
         >
           <div>
             <h2>카테고리 한눈에 보기</h2>
-            <p>6개월 가격 기록을 기준으로 비교합니다.</p>
+            <p>확보된 가격 기록을 기준으로 비교합니다.</p>
           </div>
           <dl>
             <dt>비교 상품</dt>
@@ -81,8 +84,9 @@ export default function CategoriesPage() {
           <dl>
             <dt>평균 가격 변동폭</dt>
             <dd>
-              {(summary?.averageRangeRate ?? 0).toFixed(1)}
-              <span className="text-sm font-normal"> %</span>
+              {summary?.averageRangeRate == null
+                ? "데이터 부족"
+                : `${summary.averageRangeRate.toFixed(1)}%`}
             </dd>
           </dl>
           <dl>
@@ -105,10 +109,12 @@ export default function CategoriesPage() {
               순위 더 보기 <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
-          <ProductList
-            products={products.slice(0, 5)}
-            offset={(state.data.page - 1) * 10}
+          <ProductLoadState
+            loading={ranking.loading}
+            error={ranking.error}
+            retry={ranking.retry}
           />
+          <ProductList products={ranking.data.products.slice(0, 5)} />
         </section>
         <section className="discovery-section low-price-section">
           <div className="container">
@@ -118,7 +124,9 @@ export default function CategoriesPage() {
                 <p>6개월 최저 가격 대비 10% 이내의 상품입니다.</p>
               </div>
             </div>
-            {!state.loading && !state.error && <NearLowestProducts category={category} />}
+            {!state.loading && !state.error && (
+              <NearLowestProducts category={category} />
+            )}
           </div>
         </section>
         <section className="container discovery-section">

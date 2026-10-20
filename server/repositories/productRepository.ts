@@ -40,7 +40,6 @@ export class PgProductRepository implements ProductRepository {
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            category = EXCLUDED.category,
-           current_price = EXCLUDED.current_price,
            registered_year_month = EXCLUDED.registered_year_month,
            updated_at = now()`,
         [

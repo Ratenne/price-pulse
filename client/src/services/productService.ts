@@ -1,12 +1,13 @@
 import type { ProductCategory } from "@/domain/category";
 import type { Product } from "@/domain/product";
+import { hasPriceAnalysis } from "@shared/priceAnalysis";
 
 export type ProductSort = "range" | "price-asc" | "price-desc" | "near-low";
 
 export interface CategorySummary {
   category: ProductCategory;
   productCount: number;
-  averageRangeRate: number;
+  averageRangeRate: number | null;
   nearLowestCount: number;
 }
 
@@ -23,8 +24,14 @@ export function sortProducts(
     if (sort === "price-asc") return a.currentPrice! - b.currentPrice!;
     if (sort === "price-desc") return b.currentPrice! - a.currentPrice!;
     if (sort === "near-low") {
+      if (a.lowestPriceDifferenceRate === null)
+        return b.lowestPriceDifferenceRate === null ? 0 : 1;
+      if (b.lowestPriceDifferenceRate === null) return -1;
       return a.lowestPriceDifferenceRate - b.lowestPriceDifferenceRate;
     }
+
+    if (!hasPriceAnalysis(a)) return hasPriceAnalysis(b) ? 1 : 0;
+    if (!hasPriceAnalysis(b)) return -1;
 
     return (
       b.priceRangeRate - a.priceRangeRate ||
@@ -53,7 +60,14 @@ export function getTopPriceRangeProducts(
   limit = 10,
   products: Product[]
 ): Product[] {
-  return sortProducts(products, "range").slice(0, limit);
+  return sortProducts(
+    products.filter(
+      product =>
+        hasPriceAnalysis(product) &&
+        (!product.analysis || product.analysis.rankingPeriod === "SIX_MONTHS")
+    ),
+    "range"
+  ).slice(0, limit);
 }
 
 export function getNearLowestPriceProducts(
@@ -63,6 +77,7 @@ export function getNearLowestPriceProducts(
   const products = sortProducts(
     catalog.filter(
       product =>
+        hasPriceAnalysis(product) &&
         product.currentPrice !== null &&
         product.currentPrice <= product.sixMonthLowPrice * 1.1
     ),
@@ -86,17 +101,7 @@ export function getRelatedProducts(
 ): Product[] {
   return getProductsByCategory(product.category, products)
     .filter(candidate => candidate.id !== product.id)
-    .sort(
-      (a, b) =>
-        Math.abs(
-          (a.currentPrice ?? a.sixMonthAveragePrice) -
-            (product.currentPrice ?? product.sixMonthAveragePrice)
-        ) -
-        Math.abs(
-          (b.currentPrice ?? b.sixMonthAveragePrice) -
-            (product.currentPrice ?? product.sixMonthAveragePrice)
-        )
-    )
+    .sort((a, b) => distance(a, product) - distance(b, product))
     .slice(0, limit);
 }
 
@@ -105,9 +110,11 @@ export function getCategorySummary(
   catalog: Product[]
 ): CategorySummary {
   const products = getProductsByCategory(category, catalog);
-  const averageRangeRate =
-    products.reduce((sum, product) => sum + product.priceRangeRate, 0) /
-    Math.max(1, products.length);
+  const analyzed = products.filter(hasPriceAnalysis);
+  const averageRangeRate = analyzed.length
+    ? analyzed.reduce((sum, product) => sum + product.priceRangeRate, 0) /
+      analyzed.length
+    : null;
 
   return {
     category,
@@ -115,8 +122,15 @@ export function getCategorySummary(
     averageRangeRate,
     nearLowestCount: products.filter(
       product =>
+        hasPriceAnalysis(product) &&
         product.currentPrice !== null &&
         product.currentPrice <= product.sixMonthLowPrice * 1.1
     ).length,
   };
+}
+
+function distance(a: Product, b: Product) {
+  const left = a.currentPrice ?? a.sixMonthAveragePrice;
+  const right = b.currentPrice ?? b.sixMonthAveragePrice;
+  return left === null || right === null ? Infinity : Math.abs(left - right);
 }

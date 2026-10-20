@@ -3,6 +3,21 @@ import type { Product } from "../client/src/domain/product";
 import { buildPriceChartData } from "./priceChart";
 
 describe("reviewed price chart gaps", () => {
+  it("preserves distinct actual observation times instead of collapsing them into a monthly point", () => {
+    const actual = [
+      { date: "2026-10-01T00:00:00+09:00", price: 100 },
+      { date: "2026-10-01T01:00:00+09:00", price: 110 },
+    ];
+    const data = buildPriceChartData({
+      ...product,
+      priceHistory: [],
+      excludedHistoryMonths: [],
+      observedPriceHistory: actual,
+      currentPrice: 110,
+      currentPriceCheckedAt: "2026-09-30T16:00:00Z",
+    });
+    expect(data).toEqual(actual);
+  });
   const product = {
     priceHistory: [
       { date: "2026-07", price: 1825960 },

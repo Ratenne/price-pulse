@@ -54,6 +54,7 @@ describe("DanawaBulkBackfillService", () => {
       })),
     };
     const priceHistories: PriceHistoryRepository = {
+      recordStatus: vi.fn(),
       countValidDanawaHistoricalPrices: vi.fn(async () => 20_000),
       saveMonthlyPrices: vi.fn(async () => ({
         insertedCount: 0,
@@ -96,6 +97,7 @@ describe("DanawaBulkBackfillService", () => {
     const products = { upsertDanawaProduct: vi.fn() };
     const collector = { collect: vi.fn() };
     const priceHistories = {
+      recordStatus: vi.fn(),
       countValidDanawaHistoricalPrices: vi.fn(async () => 10_000),
       saveMonthlyPrices: vi.fn(),
     };
@@ -155,6 +157,7 @@ describe("DanawaBulkBackfillService", () => {
     };
     let count = 0;
     const priceHistories: PriceHistoryRepository = {
+      recordStatus: vi.fn(),
       countValidDanawaHistoricalPrices: vi.fn(async () => count),
       saveMonthlyPrices: vi.fn(async () => {
         count += 1;

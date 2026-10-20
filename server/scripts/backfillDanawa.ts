@@ -10,7 +10,9 @@ async function main(): Promise<void> {
   }
 
   const service = createHistoricalPriceBackfillService();
-  await service.backfillDanawa(productId);
+  const result = await service.backfillDanawa(productId);
+  if (result.status === "COLLECTION_FAILED" || result.currentPriceFailed)
+    process.exitCode = 2;
 }
 
 main()

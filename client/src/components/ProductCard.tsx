@@ -46,15 +46,27 @@ export function ProductCard({
         <h3>{product.modelName}</h3>
       </Link>
       <div className="card-price">
-        <span>현재 가격</span>
+        <span>
+          {product.currentPriceSource && product.currentPriceSource !== "DANAWA"
+            ? "배송비 포함 최저가"
+            : "현재 참고가"}
+        </span>
         <strong>{formatCurrentPrice(product)}</strong>
       </div>
       {showRangeAmount && (
         <div className="card-range">
-          <span>6개월 변동폭</span>
+          <span>
+            {product.analysis?.rankingPeriod === "UNDER_SIX_MONTHS"
+              ? "관측 기간 변동폭"
+              : "6개월 변동폭"}
+          </span>
           <strong>
             {formatRate(product.priceRangeRate)}{" "}
-            <small>{formatPrice(product.priceRangeAmount)}</small>
+            <small>
+              {product.priceRangeAmount === null
+                ? "데이터 부족"
+                : formatPrice(product.priceRangeAmount)}
+            </small>
           </strong>
         </div>
       )}

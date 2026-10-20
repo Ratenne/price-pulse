@@ -57,6 +57,12 @@ export class DanawaProductListClient {
         response.status
       );
     }
-    return parseDanawaProductList(await response.text(), page, this.listCount);
+    const html = await response.text();
+    const observedAt = new Date().toISOString();
+    const result = parseDanawaProductList(html, page, this.listCount);
+    return {
+      ...result,
+      products: result.products.map(product => ({ ...product, observedAt })),
+    };
   }
 }

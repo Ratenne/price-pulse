@@ -26,7 +26,8 @@ describe("products API", () => {
     expect(res.setHeader).not.toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(JSON.parse(res.end.mock.calls[0][0])).toMatchObject({
       products: [],
-      source: "DANAWA",
+      source: "MULTI_SOURCE",
+      historySource: "DANAWA",
     });
   });
   it("rejects an invalid page before reading the database", async () => {

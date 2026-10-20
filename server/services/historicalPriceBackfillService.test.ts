@@ -29,6 +29,8 @@ function dependencies() {
     })),
   };
   const priceHistories: PriceHistoryRepository = {
+    recordStatus: vi.fn(),
+    countValidDanawaHistoricalPrices: vi.fn(),
     saveMonthlyPrices: vi.fn(async () => ({
       insertedCount: 0,
       updatedCount: 1,
@@ -40,6 +42,34 @@ function dependencies() {
 }
 
 describe("HistoricalPriceBackfillService", () => {
+  it("reconfirms current price independently of an absent historical response", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.collector.collect).mockResolvedValue({
+      prices: [],
+      receivedCount: 0,
+      invalidCount: 0,
+      selectedPeriod: 24,
+      availability: "NO_SOURCE_DATA",
+    });
+    const reconfirm = vi.fn(async () => false);
+    const service = new HistoricalPriceBackfillService(
+      deps.mappings,
+      deps.collector,
+      deps.priceHistories,
+      deps.logger,
+      reconfirm
+    );
+    expect(await service.backfillDanawa("internal-id")).toMatchObject({
+      status: "NO_SOURCE_DATA",
+      currentPriceFailed: true,
+    });
+    expect(reconfirm).toHaveBeenCalledWith("internal-id", "9503733");
+    expect(deps.priceHistories.saveMonthlyPrices).toHaveBeenCalledWith(
+      "internal-id",
+      "DANAWA",
+      []
+    );
+  });
   it("collects by mapping and returns insert/update/skip counts", async () => {
     const deps = dependencies();
     const service = new HistoricalPriceBackfillService(

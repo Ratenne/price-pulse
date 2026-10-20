@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
 import type { HistoricalPrice, PriceSource } from "../domain/historicalPrice";
+import type { CollectionStatus } from "../domain/priceCollection";
+import { saveCollectionStatus } from "./priceCollectionStatus";
 
 export interface PriceHistoryWriteResult {
   insertedCount: number;
@@ -19,6 +21,7 @@ export interface PriceHistoryChangeSet {
 }
 
 export interface PriceHistoryRepository {
+  recordStatus(productId: string, result: CollectionStatus): Promise<void>;
   saveMonthlyPrices(
     productId: string,
     source: PriceSource,
@@ -44,11 +47,11 @@ export function buildPriceHistoryChangeSet(
     const existingPrice = existingByMonth.get(price.priceYearMonth);
     if (existingPrice === undefined) {
       changeSet.inserts.push(price);
-    } else if (existingPrice === price.price) {
-      changeSet.skippedCount += 1;
     } else {
-      changeSet.updates.push(price);
+      // Corrections need a separate reviewed operation, never an implicit overwrite.
+      changeSet.skippedCount += 1;
     }
+    existingByMonth.set(price.priceYearMonth, existingPrice ?? price.price);
   }
 
   return changeSet;
@@ -56,6 +59,10 @@ export function buildPriceHistoryChangeSet(
 
 export class PgPriceHistoryRepository implements PriceHistoryRepository {
   constructor(private readonly pool: Pool) {}
+
+  async recordStatus(productId: string, result: CollectionStatus) {
+    await saveCollectionStatus(this.pool, productId, "HISTORY", result);
+  }
 
   async countValidDanawaHistoricalPrices(): Promise<number> {
     const result = await this.pool.query<{ count: string }>(
@@ -120,25 +127,6 @@ export class PgPriceHistoryRepository implements PriceHistoryRepository {
             `${price.priceYearMonth}-01`,
             price.granularity,
             price.sourceType,
-          ]
-        );
-      }
-
-      for (const price of changeSet.updates) {
-        await client.query(
-          `UPDATE price_histories
-              SET price = $1, source_type = $2, updated_at = now()
-            WHERE product_id = $3
-              AND source = $4
-              AND price_year_month = $5::date
-              AND granularity = $6`,
-          [
-            price.price,
-            price.sourceType,
-            productId,
-            source,
-            `${price.priceYearMonth}-01`,
-            price.granularity,
           ]
         );
       }

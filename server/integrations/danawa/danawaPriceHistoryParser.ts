@@ -2,7 +2,6 @@ import type { HistoricalPriceCollection } from "../../domain/historicalPrice";
 import type { Logger } from "../../logging/logger";
 import { DanawaIntegrationError } from "./danawaErrors";
 import type {
-  DanawaPeriodPriceResponse,
   DanawaPriceHistoryResponse,
   DanawaPricePointResponse,
 } from "./danawaPriceHistoryDto";
@@ -93,21 +92,30 @@ function describeShape(value: unknown, depth = 0): unknown {
     return {
       type: "array",
       length: value.length,
-      firstItemShape: depth < 3 && value.length > 0
-        ? describeShape(value[0], depth + 1)
-        : undefined,
+      firstItemShape:
+        depth < 3 && value.length > 0
+          ? describeShape(value[0], depth + 1)
+          : undefined,
     };
   }
   if (isRecord(value)) {
     return {
       type: "object",
       fields: Object.fromEntries(
-        Object.entries(value).slice(0, 40).map(([key, child]) => [
-          key,
-          depth < 3 ? describeShape(child, depth + 1) : {
-            type: Array.isArray(child) ? "array" : child === null ? "null" : typeof child,
-          },
-        ])
+        Object.entries(value)
+          .slice(0, 40)
+          .map(([key, child]) => [
+            key,
+            depth < 3
+              ? describeShape(child, depth + 1)
+              : {
+                  type: Array.isArray(child)
+                    ? "array"
+                    : child === null
+                      ? "null"
+                      : typeof child,
+                },
+          ])
       ),
       fieldCount: Object.keys(value).length,
     };
@@ -116,23 +124,54 @@ function describeShape(value: unknown, depth = 0): unknown {
 }
 
 function describePeriod(response: unknown, key: "24" | "12" | "6") {
-  if (!isRecord(response)) return { period: key, exists: false, periodType: typeof response };
+  if (!isRecord(response))
+    return { period: key, exists: false, periodType: typeof response };
   const exists = Object.prototype.hasOwnProperty.call(response, key);
   const period = response[key];
   const result = isRecord(period) ? period.result : undefined;
   return {
     period: key,
     exists,
-    periodType: period === null ? "null" : Array.isArray(period) ? "array" : typeof period,
-    resultType: result === null ? "null" : Array.isArray(result) ? "array" : typeof result,
+    periodType:
+      period === null
+        ? "null"
+        : Array.isArray(period)
+          ? "array"
+          : typeof period,
+    resultType:
+      result === null
+        ? "null"
+        : Array.isArray(result)
+          ? "array"
+          : typeof result,
     resultCount: Array.isArray(result) ? result.length : undefined,
     resultRowTypes: Array.isArray(result)
-      ? Array.from(new Set(result.map(row => row === null ? "null" : Array.isArray(row) ? "array" : typeof row)))
+      ? Array.from(
+          new Set(
+            result.map(row =>
+              row === null ? "null" : Array.isArray(row) ? "array" : typeof row
+            )
+          )
+        )
       : undefined,
     resultFieldTypes: Array.isArray(result)
       ? {
-          date: Array.from(new Set(result.filter(isRecord).map(row => row.date === null ? "null" : typeof row.date))),
-          minPrice: Array.from(new Set(result.filter(isRecord).map(row => row.minPrice === null ? "null" : typeof row.minPrice))),
+          date: Array.from(
+            new Set(
+              result
+                .filter(isRecord)
+                .map(row => (row.date === null ? "null" : typeof row.date))
+            )
+          ),
+          minPrice: Array.from(
+            new Set(
+              result
+                .filter(isRecord)
+                .map(row =>
+                  row.minPrice === null ? "null" : typeof row.minPrice
+                )
+            )
+          ),
         }
       : undefined,
   };
@@ -144,16 +183,35 @@ export function parseDanawaMonthlyPrices(
 ): HistoricalPriceCollection {
   const typedResponse = asResponse(response);
   let invalidCount = 0;
+  let emptyPeriods = 0;
 
   for (const selectedPeriod of [24, 12, 6] as const) {
     const period = typedResponse[String(selectedPeriod) as "24" | "12" | "6"];
-    if (
-      !isRecord(period) ||
-      !Array.isArray(period.result) ||
-      period.result.length === 0
-    ) {
+    if (!isRecord(period)) continue;
+    const noSummaryPrice = [period.minPrice, period.maxPrice].every(
+      value =>
+        value === undefined || value === null || value === false || value === 0
+    );
+    // An explicit zero count is evidence of absence; a positive count without
+    // rows, a null result or an unknown envelope remains a collection error.
+    const empty =
+      (period.count === 0 && period.result === undefined) ||
+      (Array.isArray(period.result) &&
+        period.result.length === 0 &&
+        (period.count === undefined || period.count === 0));
+    if (empty && noSummaryPrice) {
+      emptyPeriods++;
       continue;
     }
+    if (!Array.isArray(period.result) || period.result.length === 0) {
+      invalidCount++;
+      continue;
+    }
+    if (
+      period.count !== undefined &&
+      (!Number.isInteger(period.count) || period.count !== period.result.length)
+    )
+      invalidCount++;
     const parsed = parsePeriodRows(period.result, selectedPeriod, logger);
     invalidCount += parsed.invalidCount;
     if (parsed.prices.length > 0) {
@@ -166,10 +224,28 @@ export function parseDanawaMonthlyPrices(
     }
   }
 
+  if (
+    emptyPeriods === 3 &&
+    invalidCount === 0 &&
+    Object.keys(typedResponse).every(key =>
+      ["1", "3", "6", "12", "24"].includes(key)
+    )
+  ) {
+    return {
+      prices: [],
+      receivedCount: 0,
+      invalidCount: 0,
+      selectedPeriod: 24,
+      availability: "NO_SOURCE_DATA",
+    };
+  }
+
   logger.warn("Danawa historical response has no valid monthly period", {
     responseKeys: Object.keys(typedResponse).slice(0, 30),
     responseStructure: describeShape(typedResponse),
-    periods: (["24", "12", "6"] as const).map(key => describePeriod(typedResponse, key)),
+    periods: (["24", "12", "6"] as const).map(key =>
+      describePeriod(typedResponse, key)
+    ),
     invalidRows: invalidCount,
   });
 

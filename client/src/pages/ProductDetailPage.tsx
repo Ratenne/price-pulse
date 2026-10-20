@@ -17,6 +17,11 @@ import { Link } from "wouter";
 import NotFound from "./NotFound";
 import { useProductPage } from "@/hooks/useProductPage";
 import { ProductLoadState } from "@/components/ProductLoadState";
+import { RETAILERS } from "@shared/retailPrices";
+import {
+  formatObservationPeriod,
+  hasPriceAnalysis,
+} from "@shared/priceAnalysis";
 
 export default function ProductDetailPage({ id }: { id: string }) {
   const state = useProductPage(`view=detail&id=${encodeURIComponent(id)}`);
@@ -81,40 +86,111 @@ export default function ProductDetailPage({ id }: { id: string }) {
                 {product.modelName}
               </h1>
               <p className="mt-6 text-sm text-[var(--text-secondary)]">
-                현재 가격
+                {product.currentPriceSource &&
+                product.currentPriceSource !== "DANAWA"
+                  ? "배송비 포함 최저가"
+                  : "현재 가격 · 다나와 참고가"}
               </p>
               <p className="mt-1 text-3xl font-extrabold text-[var(--text-primary)]">
                 {formatCurrentPrice(product)}
               </p>
+              {!!product.offers?.length && (
+                <div className="mt-5 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <caption className="mb-2 text-left text-xs text-[var(--text-muted)]">
+                      수집에 성공한 판매처만 표시합니다. 일반 국내 배송 기준이며
+                      도서산간 추가 비용은 다를 수 있습니다. 다나와는 배송비
+                      미확인 참고가로, 배송비 포함 최저가 계산에서 제외합니다.
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th className="py-2">판매처</th>
+                        <th>가격</th>
+                        <th>배송비</th>
+                        <th>확인 시각</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {product.offers.map(offer => (
+                        <tr
+                          key={offer.source}
+                          className="border-t border-[var(--border)]"
+                        >
+                          <td className="py-2">
+                            <a
+                              className="text-link"
+                              href={offer.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {offer.source === "DANAWA"
+                                ? "다나와 참고가"
+                                : RETAILERS[offer.source]}
+                              {offer.source !== "DANAWA" &&
+                              offer.source === product.currentPriceSource
+                                ? " · 최저가"
+                                : ""}
+                            </a>
+                          </td>
+                          <td>{formatPrice(offer.price)}</td>
+                          <td>
+                            {offer.shippingFee === null
+                              ? "미확인"
+                              : offer.shippingFee === 0
+                                ? "무료"
+                                : `${formatPrice(offer.shippingFee)} 포함`}
+                          </td>
+                          <td>
+                            {new Date(offer.checkedAt).toLocaleString("ko-KR", {
+                              timeZone: "Asia/Seoul",
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="mt-3 text-xs text-[var(--text-muted)]">
+                월별 차트는 다나와 이력입니다. 현재 판매처의 배송비 포함 가격과
+                기준이 다를 수 있습니다.
+              </p>
               <div className="mt-7 rounded-xl bg-[var(--surface)] p-5">
                 <PriceRangeBar product={product} />
+                {formatObservationPeriod(product) && (
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    {formatObservationPeriod(product)}
+                  </p>
+                )}
               </div>
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="summary-card">
-                  <span className="text-xs text-[var(--text-muted)]">
-                    월별 최저가 평균
-                  </span>
-                  <strong className="mt-1 block text-[var(--text-primary)]">
-                    {formatPrice(product.sixMonthAveragePrice)}
-                  </strong>
+              {hasPriceAnalysis(product) && (
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="summary-card">
+                    <span className="text-xs text-[var(--text-muted)]">
+                      월별 최저가 평균
+                    </span>
+                    <strong className="mt-1 block text-[var(--text-primary)]">
+                      {formatPrice(product.sixMonthAveragePrice)}
+                    </strong>
+                  </div>
+                  <div className="summary-card">
+                    <span className="text-xs text-[var(--text-muted)]">
+                      적정 범위 하단
+                    </span>
+                    <strong className="mt-1 block text-[var(--text-primary)]">
+                      {formatPrice(product.fairPriceMin)}
+                    </strong>
+                  </div>
+                  <div className="summary-card">
+                    <span className="text-xs text-[var(--text-muted)]">
+                      적정 범위 상단
+                    </span>
+                    <strong className="mt-1 block text-[var(--text-primary)]">
+                      {formatPrice(product.fairPriceMax)}
+                    </strong>
+                  </div>
                 </div>
-                <div className="summary-card">
-                  <span className="text-xs text-[var(--text-muted)]">
-                    적정 범위 하단
-                  </span>
-                  <strong className="mt-1 block text-[var(--text-primary)]">
-                    {formatPrice(product.fairPriceMin)}
-                  </strong>
-                </div>
-                <div className="summary-card">
-                  <span className="text-xs text-[var(--text-muted)]">
-                    적정 범위 상단
-                  </span>
-                  <strong className="mt-1 block text-[var(--text-primary)]">
-                    {formatPrice(product.fairPriceMax)}
-                  </strong>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </section>

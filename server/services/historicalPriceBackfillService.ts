@@ -6,6 +6,11 @@ import { DanawaIntegrationError } from "../integrations/danawa/danawaErrors";
 import type { Logger } from "../logging/logger";
 import type { PriceHistoryRepository } from "../repositories/priceHistoryRepository";
 import type { ProductSourceMappingRepository } from "../repositories/productSourceMappingRepository";
+import {
+  completedHistoricalCollection,
+  collectionFailure,
+  type PriceDataStatus,
+} from "../domain/priceCollection";
 
 export class ProductSourceMappingNotFoundError extends Error {
   constructor(productId: string) {
@@ -22,6 +27,8 @@ export interface HistoricalPriceBackfillResult {
   insertedCount: number;
   updatedCount: number;
   skippedCount: number;
+  status: PriceDataStatus;
+  currentPriceFailed: boolean;
 }
 
 export class HistoricalPriceBackfillService {
@@ -29,7 +36,11 @@ export class HistoricalPriceBackfillService {
     private readonly mappings: ProductSourceMappingRepository,
     private readonly collector: HistoricalPriceCollector,
     private readonly priceHistories: PriceHistoryRepository,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly reconfirmCurrentPrice?: (
+      productId: string,
+      externalProductId: string
+    ) => Promise<boolean>
   ) {}
 
   async backfillDanawa(
@@ -45,12 +56,27 @@ export class HistoricalPriceBackfillService {
         throw new ProductSourceMappingNotFoundError(productId);
       }
 
-      const collection = await this.collector.collect(externalProductId);
+      const currentPriceFailed = this.reconfirmCurrentPrice
+        ? !(await this.reconfirmCurrentPrice(productId, externalProductId))
+        : false;
+      let collection;
+      try {
+        collection = await this.collector.collect(externalProductId);
+      } catch (error) {
+        await this.priceHistories.recordStatus(productId, {
+          status: "COLLECTION_FAILED",
+          reason: collectionFailure(error),
+          checkedAt: new Date().toISOString(),
+        });
+        throw error;
+      }
+      const resultStatus = completedHistoricalCollection(collection);
       const writeResult = await this.priceHistories.saveMonthlyPrices(
         productId,
         PRICE_SOURCE.DANAWA,
-        collection.prices
+        resultStatus.prices
       );
+      await this.priceHistories.recordStatus(productId, resultStatus);
       const result: HistoricalPriceBackfillResult = {
         productId,
         externalProductId,
@@ -59,6 +85,8 @@ export class HistoricalPriceBackfillService {
         insertedCount: writeResult.insertedCount,
         updatedCount: writeResult.updatedCount,
         skippedCount: collection.invalidCount + writeResult.skippedCount,
+        status: resultStatus.status,
+        currentPriceFailed,
       };
 
       this.logger.info("Historical price backfill completed", { ...result });

@@ -1,50 +1,58 @@
 import type { LivePrices } from "../integrations/danawa/danawaLivePrices.js";
+import { collectionFailure } from "../domain/priceCollection";
 import type { Logger } from "../logging/logger";
 import type { LivePriceSnapshotRepository } from "../repositories/livePriceSnapshotRepository";
-
-// If a crawl returns far fewer listings than we track, treat it as suspect and
-// keep the previous prices rather than blanking products Danawa still lists.
-const MIN_COVERAGE_TO_CLEAR_MISSING = 0.5;
-
-export interface LivePriceSnapshotSummary {
-  tracked: number;
-  fetched: number;
-  updated: number;
-  cleared: number;
-  clearSkipped: boolean;
-}
 
 export async function refreshLivePriceSnapshot(
   fetchPrices: () => Promise<LivePrices>,
   repository: LivePriceSnapshotRepository,
-  logger: Logger
-): Promise<LivePriceSnapshotSummary> {
-  // fetchPrices throws on any failed page, so a partial crawl never reaches the DB.
-  const live = await fetchPrices();
-  const tracked = await repository.countMappedProducts();
-  const { updated } = await repository.applyPrices(live.prices, live.checkedAt);
-  const covered =
-    tracked > 0 && live.prices.size >= tracked * MIN_COVERAGE_TO_CLEAR_MISSING;
-  const clearSkipped = !covered;
-  let cleared = 0;
-  if (covered) {
-    ({ cleared } = await repository.clearMissing(
-      Array.from(live.prices.keys()),
-      live.checkedAt
-    ));
-  } else {
-    logger.warn("Live price coverage too low; kept previous prices", {
-      tracked,
-      fetched: live.prices.size,
-    });
+  logger: Logger,
+  targetExternalIds?: string[]
+) {
+  const tracked =
+    targetExternalIds?.length ?? (await repository.countMappedProducts());
+  let live: LivePrices;
+  try {
+    live = await fetchPrices();
+  } catch (error) {
+    await repository.recordUnobserved(
+      [],
+      new Date().toISOString(),
+      collectionFailure(error),
+      targetExternalIds
+    );
+    throw error;
   }
-  const summary = {
-    tracked,
-    fetched: live.prices.size,
-    updated,
-    cleared,
-    clearSkipped,
-  };
+  const { updated } = await repository.applyPrices(
+    live.prices,
+    live.checkedAt,
+    live.details
+  );
+  let failed = 0;
+  const handled = Array.from(live.prices.keys());
+  for (const [externalId, reason] of Array.from(live.failures ?? [])) {
+    if (targetExternalIds && !targetExternalIds.includes(externalId)) continue;
+    const result = await repository.recordUnobserved(
+      [],
+      live.checkedAt,
+      reason,
+      [externalId]
+    );
+    failed += result.failed;
+    handled.push(externalId);
+  }
+  const remainder = await repository.recordUnobserved(
+    handled,
+    live.checkedAt,
+    "NOT_OBSERVED_IN_VALID_LIST",
+    targetExternalIds
+  );
+  failed += remainder.failed;
+  const summary = { tracked, fetched: live.prices.size, updated, failed };
+  if (failed)
+    logger.warn("Current prices not reconfirmed; previous values preserved", {
+      ...summary,
+    });
   logger.info("Live price snapshot refreshed", { ...summary });
   return summary;
 }

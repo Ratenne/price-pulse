@@ -19,6 +19,14 @@ const row = {
   current_price: 105,
   current_price_checked_at: checkedAt,
   total_count: "689",
+  valid_count: 6,
+  monthly_count: 6,
+  first_month: "2026-04",
+  last_month: "2026-09",
+  first_observed_at: null,
+  last_observed_at: null,
+  ranking_period: "SIX_MONTHS",
+  data_status: "NORMAL",
 };
 const summary = {
   category: "GPU",
@@ -39,6 +47,7 @@ describe("page-scoped product queries", () => {
       "page=0",
       "category=GPU%27",
       "sort=invalid",
+      "period=invalid",
       "view=detail",
       "view=live&ids=" + Array(21).fill("danawa-1").join(","),
     ])
@@ -79,12 +88,13 @@ describe("page-scoped product queries", () => {
     expect(query.mock.calls[1][1]).toEqual([
       "2026-04-01",
       "2026-10-01",
+      now.toISOString(),
       null,
       "",
       10,
       0,
     ]);
-    expect(query.mock.calls[2][1][0]).toBe("danawa-1");
+    expect(query.mock.calls[2][1][3]).toBe("danawa-1");
     expect(query).toHaveBeenCalledTimes(3);
   });
   it("paginates before returning any history arrays and needs no separate count query", async () => {
@@ -102,7 +112,7 @@ describe("page-scoped product queries", () => {
     expect(query.mock.calls[1][0]).toContain("count(*) OVER()");
     expect(query).toHaveBeenCalledTimes(2);
     for (const [sql] of query.mock.calls)
-      expect(sql).toContain("JOIN price_histories_for_analysis");
+      expect(sql).toContain("FROM price_histories_for_analysis");
   });
   it("falls back to the last page when the requested page is past the end", async () => {
     const query = vi

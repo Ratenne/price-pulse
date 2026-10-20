@@ -1,5 +1,6 @@
 import type { Product } from "@/domain/product";
 import { formatPrice, formatCurrentPrice } from "@/lib/productFormatting";
+import { hasPriceAnalysis } from "@shared/priceAnalysis";
 
 interface PriceRangeBarProps {
   product: Product;
@@ -14,6 +15,12 @@ export function PriceRangeBar({
   product,
   compact = false,
 }: PriceRangeBarProps) {
+  if (!hasPriceAnalysis(product))
+    return (
+      <p className="text-sm text-[var(--text-muted)]" role="status">
+        데이터 부족
+      </p>
+    );
   const range = Math.max(
     1,
     product.sixMonthHighPrice - product.sixMonthLowPrice

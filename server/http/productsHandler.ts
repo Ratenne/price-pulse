@@ -41,7 +41,12 @@ export function createProductsHandler(
       res
         .writeHead(200)
         .end(
-          JSON.stringify({ ...result, source: "DANAWA", granularity: "MONTH" })
+          JSON.stringify({
+            ...result,
+            source: "MULTI_SOURCE",
+            historySource: "DANAWA",
+            granularity: "MONTH",
+          })
         );
     } catch (error) {
       if (res.destroyed) return;
