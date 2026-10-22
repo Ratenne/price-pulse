@@ -58,3 +58,10 @@ Vercel Git Integration에서 Pull Request Preview Deployment를 활성화합니�
 - CI 실패: Production 승인 금지
 - Preview 실패: `main` 병합 금지
 - Production smoke test 실패: `docs/rollback.md` 수행
+
+## 소매 API 수집 설정
+
+판매처별 공식 계약 검토, 서버 환경변수 이름과 GitHub Secrets 연결 절차는
+[소매 API 계약 문서](retail-api-contracts.md)를 따른다. 현재 네 판매처의 실수집
+어댑터는 미지원이며, 키 설정만으로 수집하거나 기존 소매 workflow를 다시
+활성화하지 않는다. 인증정보는 Vercel 클라이언트 빌드용 `VITE_*` 변수에 넣지 않는다.

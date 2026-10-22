@@ -110,15 +110,14 @@ describe("reviewed retail prices", () => {
       ).hostname
     ).toBe("itempage3.auction.co.kr");
   });
-  it("stops on a denied request without retrying or parsing the response", async () => {
+  it("disables the legacy HTML entry point before making any request", async () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(new Response("Denied", { status: 403 }));
     await expect(fetchRetailOffer(link, fetchFn)).rejects.toThrow(
-      "ACCESS_BLOCKED"
+      "HTML_COLLECTION_DISABLED"
     );
-    expect(fetchFn).toHaveBeenCalledTimes(1);
-    expect(fetchFn.mock.calls[0][1].redirect).toBe("error");
+    expect(fetchFn).not.toHaveBeenCalled();
   });
   it("rejects a sold out 11st offer", () => {
     expect(() =>

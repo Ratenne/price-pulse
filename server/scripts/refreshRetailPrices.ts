@@ -1,20 +1,26 @@
+import {
+  RETAIL_API_SOURCES,
+  isRetailApiSource,
+} from "../integrations/retail/retailApiConfig.js";
+import { retailApiReadiness } from "../integrations/retail/retailApiSupport.js";
+import { PgRetailProductRepository } from "../repositories/retailProductRepository.js";
+import { upsertRetailProducts } from "../services/retailProductUpsert.js";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { getDatabasePool, closeDatabasePool } from "../config/database.js";
 import { PgRetailPriceRepository } from "../repositories/retailPriceRepository.js";
 import {
   linkSchema,
-  observationSchema,
-  validateObservation,
+  collectionSchema,
+  collectionObservation,
   type RetailLink,
 } from "../integrations/retail/retailPrice.js";
 import {
   fetchRetailOffer,
   RetailFetchError,
 } from "../integrations/retail/retailClient.js";
-import { refreshRetailPrices } from "../services/retailPriceRefresh.js";
 import { consoleLogger as logger } from "../logging/logger.js";
-import { setTimeout as delay } from "node:timers/promises";
+import { checkRetailExecution } from "../integrations/retail/retailPolicy.js";
 
 async function jsonFile(path: string | URL): Promise<unknown> {
   const content = await readFile(path, "utf8");
@@ -26,20 +32,38 @@ async function main() {
   const args = process.argv.slice(2);
   let file: string | undefined,
     importFile: string | undefined,
+    productFile: string | undefined,
+    apiStatus = false,
     probe = false,
     list = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--links" && args[i + 1]) file = args[++i];
     else if (args[i] === "--import" && args[i + 1]) importFile = args[++i];
+    else if (args[i] === "--products" && args[i + 1]) productFile = args[++i];
+    else if (args[i] === "--api-status") apiStatus = true;
     else if (args[i] === "--probe") probe = true;
     else if (args[i] === "--list") list = true;
     else
       throw new Error(
-        "Usage: refreshRetailPrices [--links FILE] [--probe | --list | --import FILE]"
+        "Usage: refreshRetailPrices [--links FILE] [--probe | --list | --api-status | --import FILE | --products FILE]"
       );
   }
-  if ([probe, list, !!importFile].filter(Boolean).length > 1)
+  if (
+    [probe, list, apiStatus, !!importFile, !!productFile].filter(Boolean)
+      .length > 1
+  )
     throw new Error("Conflicting modes");
+  if (apiStatus) {
+    for (const source of RETAIL_API_SOURCES)
+      logger.info("Retail API readiness", { ...retailApiReadiness(source) });
+    logger.info("Retail API collection unavailable", {
+      targeted: RETAIL_API_SOURCES.length,
+      succeeded: 0,
+      skipped: RETAIL_API_SOURCES.length,
+    });
+    process.exitCode = 2;
+    return;
+  }
   if (probe) {
     const links = z
       .array(linkSchema)
@@ -51,14 +75,12 @@ async function main() {
       );
     let succeeded = 0;
     for (let i = 0; i < links.length; i++) {
-      if (i) await delay(1500);
       const link: RetailLink = { ...links[i], id: i + 1, version: 1 };
       try {
         const offer = await fetchRetailOffer(link);
         succeeded++;
         logger.info("Retail probe succeeded (no DB writes)", {
           source: link.source,
-          url: link.url,
           itemPrice: offer.itemPrice,
           shippingFee: offer.shippingFee,
           total: offer.itemPrice + offer.shippingFee,
@@ -66,7 +88,7 @@ async function main() {
       } catch (error) {
         logger.warn("Retail probe failed (no DB writes)", {
           source: link.source,
-          url: link.url,
+          status: "UNSUPPORTED",
           code:
             error instanceof RetailFetchError
               ? error.code
@@ -82,9 +104,23 @@ async function main() {
     if (succeeded !== links.length) process.exitCode = 2;
     return;
   }
-  const pool = getDatabasePool();
-  const repository = new PgRetailPriceRepository(pool);
+  if (productFile) {
+    const inputs = z
+      .array(z.unknown())
+      .min(1)
+      .max(1000)
+      .parse(await jsonFile(productFile));
+    // Lazy DB access: disabled/unapproved inputs never open a pool.
+    const repository = {
+      upsert: (...args: Parameters<PgRetailProductRepository["upsert"]>) =>
+        new PgRetailProductRepository(getDatabasePool()).upsert(...args),
+    };
+    const summary = await upsertRetailProducts(repository, logger, inputs);
+    if (summary.failed || summary.held || summary.skipped) process.exitCode = 2;
+    return;
+  }
   if (list) {
+    const pool = getDatabasePool();
     const result = await pool.query(
       `SELECT id,product_id,source,url,enabled,last_attempt_at,last_error FROM retail_product_links ORDER BY id`
     );
@@ -93,16 +129,27 @@ async function main() {
   }
   if (importFile) {
     const inputs = z
-      .array(observationSchema)
+      .array(collectionSchema)
       .min(1)
       .max(1000)
       .parse(await jsonFile(importFile));
-    const now = new Date();
     const validated = [];
     for (const input of inputs) {
-      const link = await repository.find(input.listingId);
+      const access = checkRetailExecution(input.source, {
+        method: "IMPORT",
+        adapterConfigured: true,
+      });
+      if (!access.allowed)
+        throw new RetailFetchError(access.code, access.status);
+      if (input.method !== "IMPORT")
+        throw new RetailFetchError("INVALID_COLLECTION_METHOD");
+      if (!input.listingId) throw new Error("MISSING_LISTING_ID");
+    }
+    const repository = new PgRetailPriceRepository(getDatabasePool());
+    for (const input of inputs) {
+      const link = await repository.find(input.listingId!);
       if (!link) throw new Error("UNKNOWN_OR_DISABLED_LISTING");
-      validated.push({ link, offer: validateObservation(link, input, now) });
+      validated.push({ link, offer: collectionObservation(link, input) });
     }
     let updated = 0;
     for (const { link, offer } of validated)
@@ -121,39 +168,41 @@ async function main() {
         file ?? new URL("../../config/retail-links.json", import.meta.url)
       )
     );
-  let missing = 0;
-  const resolved = [];
-  // Resolve against the canonical Danawa mapping, including installations with custom product IDs.
+  // Keep the manual batch entry point, but no adapter is wired until approval
+  // and implementation are reviewed. Future adapters use refreshRetailPrices.
+  const skipStatuses = { NOT_CONFIGURED: 0, NOT_APPROVED: 0, UNSUPPORTED: 0 };
   for (const seed of seeds) {
-    const found = await pool.query<{ id: string }>(
-      `SELECT p.id FROM products p JOIN product_source_mappings m ON m.product_id=p.id AND m.source='DANAWA'
-       WHERE p.name=$1 AND (p.id=$2 OR m.external_product_id=$3)`,
-      [seed.productName, seed.productId, seed.productId.replace(/^danawa-/, "")]
-    );
-    if (found.rows.length !== 1) {
-      missing++;
-      logger.warn("Retail seed has no exact catalog match", {
-        productId: seed.productId,
-        source: seed.source,
-      });
-      continue;
-    }
-    resolved.push({ ...seed, productId: found.rows[0].id });
+    const access = isRetailApiSource(seed.source)
+      ? retailApiReadiness(seed.source)
+      : checkRetailExecution(seed.source, {
+          method: "API",
+          adapterConfigured: false,
+        });
+    if (access.allowed) throw new Error("UNEXPECTED_RUNNABLE_SOURCE");
+    skipStatuses[access.status]++;
+    logger.warn("Retail collection skipped", {
+      source: seed.source,
+      code: access.code,
+      status: access.status,
+    });
   }
-  await repository.register(resolved);
-  const limit = Number(process.env.RETAIL_BATCH_LIMIT ?? 100);
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500)
-    throw new Error("Invalid RETAIL_BATCH_LIMIT");
-  const summary = await refreshRetailPrices(repository, logger, { limit });
-  if (summary.failed || summary.skipped || missing) process.exitCode = 2;
-  else if (!summary.targeted) {
-    logger.warn("No retail links are due; no prices collected");
-  }
+  logger.info("Retail price refresh disabled", {
+    targeted: seeds.length,
+    succeeded: 0,
+    updated: 0,
+    failed: 0,
+    skipped: seeds.length,
+    skipStatuses,
+  });
+  process.exitCode = 2;
 }
 main()
   .catch(error => {
     logger.error("Retail price batch failed", {
       exceptionType: error instanceof Error ? error.name : typeof error,
+      ...(error instanceof RetailFetchError
+        ? { code: error.code, status: error.status }
+        : {}),
     });
     process.exitCode = 1;
   })
