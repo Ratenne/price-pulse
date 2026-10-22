@@ -4,6 +4,9 @@ export interface DiscoveredProduct {
   category: string;
   sourceUrl: string;
   currentMinPrice?: number;
+  currentPriceFailureReason?:
+    | "CURRENT_PRICE_NOT_PROVIDED"
+    | "INVALID_CURRENT_PRICE";
   observedAt?: string;
   registeredYearMonth?: string;
 }

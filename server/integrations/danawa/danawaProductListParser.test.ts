@@ -42,6 +42,31 @@ describe("parseDanawaProductList", () => {
     expect(calculateTotalPages(908, 30)).toBe(31);
   });
 
+  it.each(["0", "-1", "not-a-price", "1.5", "9007199254740992"])(
+    "preserves the reason a listed current price %s was rejected",
+    value => {
+      const product = parseDanawaProductList(
+        FIXTURE.replace('value="827,000"', `value="${value}"`),
+        1,
+        30
+      ).products[0];
+      expect(product.currentMinPrice).toBeUndefined();
+      expect(product.currentPriceFailureReason).toBe("INVALID_CURRENT_PRICE");
+    }
+  );
+
+  it("distinguishes an absent current price from an invalid listed price", () => {
+    const product = parseDanawaProductList(
+      FIXTURE.replace('<input id="min_price_87687467" value="827,000" />', ""),
+      1,
+      30
+    ).products[0];
+    expect(product.currentMinPrice).toBeUndefined();
+    expect(product.currentPriceFailureReason).toBe(
+      "CURRENT_PRICE_NOT_PROVIDED"
+    );
+  });
+
   it("deduplicates products by externalProductId", () => {
     const product = parseDanawaProductList(FIXTURE, 1, 30).products[0];
     expect(deduplicateDiscoveredProducts([product, product])).toEqual([

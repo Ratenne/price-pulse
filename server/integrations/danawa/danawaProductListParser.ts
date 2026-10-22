@@ -83,14 +83,24 @@ export function parseDanawaProductList(
         ?.trim();
       if (!name || !category) return;
 
+      const rawCurrentPrice = item
+        .find(`#min_price_${externalProductId}`)
+        .attr("value");
+      const currentMinPrice = parsePositivePrice(rawCurrentPrice);
+
       products.push({
         externalProductId,
         name,
         category,
         sourceUrl: new URL(rawUrl, "https://prod.danawa.com").toString(),
-        currentMinPrice: parsePositivePrice(
-          item.find(`#min_price_${externalProductId}`).attr("value")
-        ),
+        currentMinPrice,
+        ...(currentMinPrice === undefined
+          ? {
+              currentPriceFailureReason: rawCurrentPrice?.trim()
+                ? ("INVALID_CURRENT_PRICE" as const)
+                : ("CURRENT_PRICE_NOT_PROVIDED" as const),
+            }
+          : {}),
         registeredYearMonth: parseRegisteredYearMonth(
           item.find(".meta_item.mt_date").first().text()
         ),

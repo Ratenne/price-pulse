@@ -9,7 +9,10 @@ import { PgPriceHistoryRepository } from "../../server/repositories/priceHistory
 import { PgProductRepository } from "../../server/repositories/productRepository.ts";
 import { refreshLivePriceSnapshot } from "../../server/services/livePriceSnapshot.ts";
 import { refreshWeeklyPrices } from "../../server/services/weeklyPriceRefresh.ts";
-import { DanawaBulkBackfillService } from "../../server/services/danawaBulkBackfillService.ts";
+import {
+  DanawaBulkBackfillService,
+  danawaBulkBackfillExitCode,
+} from "../../server/services/danawaBulkBackfillService.ts";
 import { parseDanawaMonthlyPrices } from "../../server/integrations/danawa/danawaPriceHistoryParser.ts";
 import { DANAWA_GPU_CATEGORY } from "../../server/integrations/danawa/danawaCategory.ts";
 import { createDanawaBulkBackfillConfig } from "../../server/config/danawaBackfill.ts";
@@ -210,7 +213,20 @@ try {
   };
   assert.deepEqual(
     await monthly.saveMonthlyPrices("historical", "DANAWA", [imported]),
-    { insertedCount: 0, updatedCount: 0, skippedCount: 1 }
+    {
+      insertedCount: 0,
+      updatedCount: 0,
+      skippedCount: 1,
+      comparisons: [
+        {
+          priceYearMonth: imported.priceYearMonth,
+          existingPrice: 700,
+          incomingPrice: imported.price,
+          outcome: "CONFLICT",
+          reason: "DIFFERENT_MONTHLY_PRICE",
+        },
+      ],
+    }
   );
   assert.deepEqual(
     await rows("SELECT * FROM price_histories ORDER BY id"),
@@ -412,6 +428,83 @@ try {
   assert.equal((await events("danawa-106")).length, 1);
   console.log(
     "PASS: discovery reuses fresh list prices despite absent/failed monthly data, no product deletion, migration after writes"
+  );
+
+  // The v1.4 acceptance case, using real repositories and isolated PostgreSQL.
+  const warningBatch = new DanawaBulkBackfillService(
+    {
+      fetchPage: async () => ({
+        page: 1,
+        totalPages: 1,
+        totalProductCount: 12,
+        products: Array.from({ length: 12 }, (_, i) => ({
+          externalProductId: String(90000 + i),
+          name: `Warning GPU ${i}`,
+          category: "GPU",
+          sourceUrl: `https://prod.danawa.com/info/?pcode=${90000 + i}`,
+        })),
+      }),
+    },
+    products,
+    {
+      collect: async () => ({
+        prices: [
+          {
+            priceYearMonth: "2026-09",
+            price: 100,
+            granularity: "MONTH",
+            sourceType: "HISTORICAL_IMPORT",
+          },
+        ],
+        receivedCount: 1,
+        invalidCount: 0,
+        selectedPeriod: 24,
+      }),
+    },
+    monthly,
+    logger,
+    { ...createDanawaBulkBackfillConfig(), targetHistoricalRowCount: 0 },
+    live
+  );
+  const seeded = await warningBatch.run(DANAWA_GPU_CATEGORY, now);
+  assert.equal(seeded.insertedPrices, 12);
+  const rawBefore = await rows("SELECT * FROM price_histories ORDER BY id");
+  const currentBefore = await rows(
+    "SELECT id,current_price,current_price_checked_at FROM products ORDER BY id"
+  );
+  const observationsBefore = await rows(
+    "SELECT * FROM price_observations ORDER BY product_id,observed_at"
+  );
+  const repeated = await warningBatch.run(DANAWA_GPU_CATEGORY, now);
+  assert.equal(danawaBulkBackfillExitCode(repeated), 0);
+  assert.equal(repeated.successfulProducts, 12);
+  assert.equal(repeated.failedProducts, 0);
+  assert.equal(repeated.currentPriceFailures, 12);
+  assert.equal(repeated.currentPriceFailureDetails.length, 12);
+  assert.equal(repeated.insertedPrices, 0);
+  assert.equal(repeated.updatedPrices, 0);
+  assert.equal(repeated.skippedPrices, 12);
+  assert.equal(repeated.duplicatePrices, 12);
+  assert.equal(repeated.conflictingPrices, 0);
+  assert.equal(repeated.incomparablePrices, 0);
+  assert.deepEqual(
+    await rows("SELECT * FROM price_histories ORDER BY id"),
+    rawBefore
+  );
+  assert.deepEqual(
+    await rows(
+      "SELECT id,current_price,current_price_checked_at FROM products ORDER BY id"
+    ),
+    currentBefore
+  );
+  assert.deepEqual(
+    await rows(
+      "SELECT * FROM price_observations ORDER BY product_id,observed_at"
+    ),
+    observationsBefore
+  );
+  console.log(
+    "PASS: 12 current-price warnings, duplicate-only rerun exits 0, raw/current/observed prices unchanged"
   );
 } finally {
   await db.close();

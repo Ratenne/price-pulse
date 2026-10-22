@@ -9,7 +9,10 @@ import { consoleLogger } from "../logging/logger";
 import { PgPriceHistoryRepository } from "../repositories/priceHistoryRepository";
 import { PgProductRepository } from "../repositories/productRepository";
 import { PgLivePriceSnapshotRepository } from "../repositories/livePriceSnapshotRepository";
-import { DanawaBulkBackfillService } from "../services/danawaBulkBackfillService";
+import {
+  DanawaBulkBackfillService,
+  danawaBulkBackfillExitCode,
+} from "../services/danawaBulkBackfillService";
 
 async function main(): Promise<void> {
   const config = createDanawaBulkBackfillConfig();
@@ -33,15 +36,19 @@ async function main(): Promise<void> {
     new PgLivePriceSnapshotRepository(pool)
   );
   const summary = await service.run(DANAWA_GPU_CATEGORY);
+  const exitCode = danawaBulkBackfillExitCode(summary);
   console.log(
-    JSON.stringify({ message: "Danawa bulk backfill completed", summary })
+    JSON.stringify({
+      message: "Danawa bulk backfill completed",
+      summary,
+      executionStatus: exitCode === 0 ? "SUCCESS" : "FAILED",
+      hasWarnings:
+        summary.currentPriceFailures > 0 ||
+        (summary.conflictingPrices ?? 0) > 0 ||
+        (summary.incomparablePrices ?? 0) > 0,
+    })
   );
-  if (
-    summary.failedPages > 0 ||
-    summary.failedProducts > 0 ||
-    summary.currentPriceFailures > 0
-  )
-    process.exitCode = 2;
+  process.exitCode = exitCode;
 }
 
 main()

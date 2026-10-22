@@ -29,14 +29,29 @@ export interface DanawaBulkBackfillProgress {
   noSourceDataProducts: number;
   insufficientHistoryProducts: number;
   currentPriceFailures: number;
+  currentPriceSuccesses: number | null;
+  currentPriceFailureDetails: { externalProductId: string; reason: string }[];
+  currentPriceCollectionEnabled: boolean;
   failedPages: number;
   insertedPrices: number;
   updatedPrices: number;
   skippedPrices: number;
+  duplicatePrices: number | null;
+  conflictingPrices: number | null;
+  incomparablePrices: number | null;
+  excludedCurrentMonthPrices: number;
+  excludedFutureMonthPrices: number;
+  fullScanMode: boolean;
   invalidPrices: number;
   currentHistoricalRowCount: number;
   targetHistoricalRowCount: number;
   targetReached: boolean;
+}
+
+export function danawaBulkBackfillExitCode(
+  summary: Pick<DanawaBulkBackfillProgress, "failedPages" | "failedProducts">
+): 0 | 2 {
+  return summary.failedPages > 0 || summary.failedProducts > 0 ? 2 : 0;
 }
 
 async function processWithConcurrency<T>(
@@ -89,10 +104,19 @@ export class DanawaBulkBackfillService {
       noSourceDataProducts: 0,
       insufficientHistoryProducts: 0,
       currentPriceFailures: 0,
+      currentPriceSuccesses: this.currentPrices ? 0 : null,
+      currentPriceFailureDetails: [],
+      currentPriceCollectionEnabled: !!this.currentPrices,
       failedPages: 0,
       insertedPrices: 0,
       updatedPrices: 0,
       skippedPrices: 0,
+      duplicatePrices: 0,
+      conflictingPrices: 0,
+      incomparablePrices: 0,
+      excludedCurrentMonthPrices: 0,
+      excludedFutureMonthPrices: 0,
+      fullScanMode: this.config.targetHistoricalRowCount === 0,
       invalidPrices: 0,
       currentHistoricalRowCount:
         await this.priceHistories.countValidDanawaHistoricalPrices(),
@@ -178,17 +202,40 @@ export class DanawaBulkBackfillService {
     progress.processedProducts += 1;
 
     if (this.currentPrices) {
-      if (product.currentMinPrice !== undefined && product.observedAt) {
+      const reason =
+        product.currentMinPrice === undefined
+          ? (product.currentPriceFailureReason ?? "CURRENT_PRICE_NOT_PROVIDED")
+          : !Number.isSafeInteger(product.currentMinPrice) ||
+              product.currentMinPrice <= 0
+            ? "INVALID_CURRENT_PRICE"
+            : !product.observedAt
+              ? "OBSERVATION_TIME_NOT_PROVIDED"
+              : !Number.isFinite(Date.parse(product.observedAt))
+                ? "INVALID_OBSERVATION_TIME"
+                : undefined;
+      if (!reason) {
+        // Repository/transaction/integrity errors must propagate as fatal errors.
         await this.currentPrices.applyPrices(
-          new Map([[product.externalProductId, product.currentMinPrice]]),
-          product.observedAt
+          new Map([[product.externalProductId, product.currentMinPrice!]]),
+          product.observedAt!
         );
+        if (progress.currentPriceSuccesses !== null)
+          progress.currentPriceSuccesses++;
       } else {
         progress.currentPriceFailures++;
+        progress.currentPriceFailureDetails.push({
+          externalProductId: product.externalProductId,
+          reason,
+        });
+        this.logger.warn("Danawa product current price unavailable", {
+          source: PRICE_SOURCE.DANAWA,
+          externalProductId: product.externalProductId,
+          reason,
+        });
         await this.currentPrices.recordUnobserved(
           [],
           new Date().toISOString(),
-          "CURRENT_PRICE_NOT_PROVIDED",
+          reason,
           [product.externalProductId]
         );
       }
@@ -223,6 +270,13 @@ export class DanawaBulkBackfillService {
     }
 
     const resultStatus = completedHistoricalCollection(collection, now);
+    const currentMonth = koreaYearMonth(now);
+    progress.excludedCurrentMonthPrices += collection.prices.filter(
+      p => p.priceYearMonth === currentMonth
+    ).length;
+    progress.excludedFutureMonthPrices += collection.prices.filter(
+      p => p.priceYearMonth > currentMonth
+    ).length;
     if (!resultStatus.prices.length) {
       const context = {
         source: PRICE_SOURCE.DANAWA,
@@ -268,6 +322,28 @@ export class DanawaBulkBackfillService {
     progress.insertedPrices += writeResult.insertedCount;
     progress.updatedPrices += writeResult.updatedCount;
     progress.skippedPrices += writeResult.skippedCount;
+    if (writeResult.comparisons === undefined) {
+      // Older repositories cannot split legacy skips reliably.
+      progress.duplicatePrices = null;
+      progress.conflictingPrices = null;
+      progress.incomparablePrices = null;
+    } else {
+      for (const comparison of writeResult.comparisons) {
+        if (comparison.outcome === "DUPLICATE") {
+          if (progress.duplicatePrices !== null) progress.duplicatePrices++;
+        } else if (comparison.outcome === "CONFLICT") {
+          if (progress.conflictingPrices !== null) progress.conflictingPrices++;
+        } else if (progress.incomparablePrices !== null)
+          progress.incomparablePrices++;
+        if (comparison.outcome !== "DUPLICATE") {
+          this.logger.warn("Danawa monthly price comparison requires review", {
+            source: PRICE_SOURCE.DANAWA,
+            externalProductId: product.externalProductId,
+            ...comparison,
+          });
+        }
+      }
+    }
     progress.invalidPrices += collection.invalidCount;
   }
 }
