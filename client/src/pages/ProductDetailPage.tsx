@@ -1,3 +1,4 @@
+import { PriceChangeInsights } from "@/components/PriceChangeInsights";
 import { Header } from "@/components/Header";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { PriceRangeBar } from "@/components/PriceRangeBar";
@@ -202,6 +203,8 @@ export default function ProductDetailPage({ id }: { id: string }) {
             </div>
           </div>
         </section>
+
+        <PriceChangeInsights key={product.id} product={product} />
 
         <section className="container py-12">
           <div className="grid gap-6 md:grid-cols-2">

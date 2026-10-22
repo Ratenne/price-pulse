@@ -3,6 +3,7 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createProductsHandler } from "./http/productsHandler";
+import { createProductNewsHandler } from "./http/productNewsHandler";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +12,7 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   app.all("/api/products", createProductsHandler());
+  app.all("/api/product-news", createProductNewsHandler());
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "NOT_FOUND" });
   });
