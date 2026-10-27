@@ -52,36 +52,64 @@ export function deduplicateDiscoveredProducts(
 export function parseDanawaProductList(
   html: string,
   page: number,
-  listCount: number
+  listCount: number,
+  allowEmptySearch = false
 ): DiscoveredProductPage {
   const $ = cheerio.load(html);
   const totalValue = $("#totalProductCount").attr("value");
   const totalProductCount = Number(totalValue);
+  if (
+    allowEmptySearch &&
+    totalValue?.trim() === "0" &&
+    $("li.prod_item").length === 0
+  ) {
+    return {
+      page,
+      totalProductCount: 0,
+      totalPages: 0,
+      products: [],
+      rejectedItems: 0,
+      rejectedExternalIds: [],
+    };
+  }
   if (!Number.isInteger(totalProductCount) || totalProductCount <= 0) {
     throw new Error("Danawa product list is missing a valid totalProductCount");
   }
 
   const products: DiscoveredProduct[] = [];
+  let rejectedItems = 0;
+  const rejectedExternalIds: string[] = [];
   $("li.prod_item")
     .not(".prod_ad_item")
     .each((_index, element) => {
       const item = $(element);
       const itemId = item.attr("id") ?? "";
       if (/^ad|^adSmartProduct_/i.test(itemId)) return;
+      const idCode = /^productItem(\d+)$/.exec(itemId)?.[1];
 
       const nameLink = item.find('a[name="productName"]').first();
       const rawUrl = nameLink.attr("href")?.trim();
-      if (!rawUrl) return;
-      const idCode = /^productItem(\d+)$/.exec(itemId)?.[1];
+      if (!rawUrl) {
+        rejectedItems++;
+        if (idCode) rejectedExternalIds.push(idCode);
+        return;
+      }
       const externalProductId = productCodeFromUrl(rawUrl) ?? idCode;
-      if (!externalProductId) return;
+      if (!externalProductId) {
+        rejectedItems++;
+        return;
+      }
 
       const name = nameLink.text().replace(/\s+/g, " ").trim();
       const category = item
         .find(`#productItem_categoryInfo_${externalProductId}`)
         .attr("value")
         ?.trim();
-      if (!name || !category) return;
+      if (!name || !category) {
+        rejectedItems++;
+        rejectedExternalIds.push(externalProductId);
+        return;
+      }
 
       const rawCurrentPrice = item
         .find(`#min_price_${externalProductId}`)
@@ -117,5 +145,7 @@ export function parseDanawaProductList(
     totalProductCount,
     totalPages: calculateTotalPages(totalProductCount, listCount),
     products: uniqueProducts,
+    rejectedItems,
+    rejectedExternalIds,
   };
 }

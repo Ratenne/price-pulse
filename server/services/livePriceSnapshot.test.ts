@@ -7,8 +7,12 @@ const checkedAt = "2026-10-16T03:00:00.000Z";
 function repo(): LivePriceSnapshotRepository {
   return {
     countMappedProducts: vi.fn(async () => 4),
+    findTrackedProducts: vi.fn(async () => []),
     findProductsWithoutHistory: vi.fn(async () => []),
-    applyPrices: vi.fn(async prices => ({ updated: prices.size })),
+    applyPrices: vi.fn(async prices => ({
+      updated: prices.size,
+      outcomes: [],
+    })),
     recordUnobserved: vi.fn(async () => ({ failed: 1 })),
   };
 }

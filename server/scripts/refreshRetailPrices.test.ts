@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const directory = mkdtempSync(path.join(tmpdir(), "retail-disabled-"));
 const guard = path.join(directory, "network-guard.mjs");
@@ -16,7 +17,8 @@ const originalConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function(...args) {
   const first = Array.isArray(args[0]) ? args[0][0] : args[0];
   // tsx uses a local Unix socket for its loader; external TCP stays blocked.
-  const ipc = typeof first === 'string' ? first.startsWith('/') : typeof first?.path === 'string';
+  const pipePrefix = String.fromCharCode(92, 92) + '.' + String.fromCharCode(92) + 'pipe' + String.fromCharCode(92);
+  const ipc = typeof first === 'string' ? first.startsWith('/') || first.startsWith(pipePrefix) : typeof first?.path === 'string';
   return ipc ? originalConnect.apply(this, args) : denied();
 };
 `
@@ -30,7 +32,7 @@ function run(args: string[], overrides: NodeJS.ProcessEnv = {}) {
     process.execPath,
     [
       "--import",
-      guard,
+      pathToFileURL(guard).href,
       "--import",
       "tsx",
       "server/scripts/refreshRetailPrices.ts",

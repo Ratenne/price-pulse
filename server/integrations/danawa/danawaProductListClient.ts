@@ -59,7 +59,22 @@ export class DanawaProductListClient {
     }
     const html = await response.text();
     const observedAt = new Date().toISOString();
-    const result = parseDanawaProductList(html, page, this.listCount);
+    let result: DiscoveredProductPage;
+    try {
+      result = parseDanawaProductList(
+        html,
+        page,
+        this.listCount,
+        Boolean(keyword)
+      );
+    } catch (error) {
+      throw new DanawaIntegrationError(
+        "Invalid Danawa product list response",
+        "PARSE",
+        undefined,
+        { cause: error }
+      );
+    }
     return {
       ...result,
       products: result.products.map(product => ({ ...product, observedAt })),

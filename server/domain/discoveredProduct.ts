@@ -16,4 +16,6 @@ export interface DiscoveredProductPage {
   totalProductCount: number;
   totalPages: number;
   products: DiscoveredProduct[];
+  rejectedItems?: number;
+  rejectedExternalIds?: string[];
 }

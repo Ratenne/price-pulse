@@ -7,7 +7,10 @@ import type { Pool } from "pg";
 import { PgLivePriceSnapshotRepository } from "../../server/repositories/livePriceSnapshotRepository.ts";
 import { PgPriceHistoryRepository } from "../../server/repositories/priceHistoryRepository.ts";
 import { PgProductRepository } from "../../server/repositories/productRepository.ts";
-import { refreshLivePriceSnapshot } from "../../server/services/livePriceSnapshot.ts";
+import {
+  refreshLivePriceSnapshot,
+  refreshTrackedLivePriceSnapshot,
+} from "../../server/services/livePriceSnapshot.ts";
 import { refreshWeeklyPrices } from "../../server/services/weeklyPriceRefresh.ts";
 import {
   DanawaBulkBackfillService,
@@ -141,30 +144,56 @@ try {
     888
   );
 
-  assert.equal((await save("101", 100, 1)).updated, 1);
+  const first = await save("101", 100, 1);
+  assert.equal(first.updated, 1);
+  assert.deepEqual(first.outcomes[0], {
+    externalId: "101",
+    productId: "internal-a",
+    status: "COMMITTED",
+    eventType: "FIRST_OBSERVATION",
+    firstObservation: true,
+    basePriceChanged: null,
+    shippingKnowledgeChanged: false,
+  });
   assert.equal((await events("internal-a"))[0].event_type, "FIRST_OBSERVATION");
   assert.equal(
     (await events("internal-a"))[0].observed_at.toISOString(),
     at(1)
   );
   assert.equal((await events("internal-a"))[0].shipping_fee, null);
-  assert.equal((await save("101", 100, 1)).updated, 0);
-  await save("101", 100, 2);
+  const same = await save("101", 100, 1);
+  assert.equal(same.updated, 0);
+  assert.equal(same.outcomes[0].reason, "SAME_OBSERVATION");
+  const unchanged = await save("101", 100, 2);
+  assert.equal(unchanged.outcomes[0].basePriceChanged, false);
+  assert.equal(unchanged.outcomes[0].eventType, undefined);
   assert.equal((await events("internal-a")).length, 1);
   assert.equal(Number((await events("internal-a"))[0].observation_count), 2);
   assert.equal(
     (await events("internal-a"))[0].last_observed_at.toISOString(),
     at(2)
   );
-  await assert.rejects(() => save("101", 101, 2), /OBSERVATION_CONFLICT/);
-  await save("101", 101, 3);
+  await assert.rejects(
+    () => save("101", 101, 2),
+    (error: any) =>
+      error.message === "OBSERVATION_CONFLICT" &&
+      error.failureType === "OBSERVATION_CONFLICT" &&
+      error.productId === "internal-a" &&
+      error.executionStatus === "FAILED"
+  );
+  const changed = await save("101", 101, 3);
+  assert.equal(changed.outcomes[0].basePriceChanged, true);
+  assert.equal(changed.outcomes[0].eventType, "PRICE_CHANGE");
   await save("101", 102, 4);
   await save("101", 100, 5);
   assert.deepEqual(
     (await events("internal-a")).map(e => e.event_type),
     ["FIRST_OBSERVATION", "PRICE_CHANGE", "PRICE_CHANGE", "PRICE_CHANGE"]
   );
-  await save("101", 1, 0); // Late result must not revert prices or add an event.
+  assert.equal(
+    (await save("101", 1, 0)).outcomes[0].reason,
+    "OLDER_OBSERVATION"
+  ); // Late result must not revert prices or add an event.
   assert.equal(
     (await rows("SELECT current_price FROM products WHERE id='internal-a'"))[0]
       .current_price,
@@ -176,7 +205,9 @@ try {
   );
 
   await save("103", 200, 1, 3000);
-  await save("103", 200, 2, 3001); // Shipping only, exactly one KRW.
+  const shippingOnly = await save("103", 200, 2, 3001); // Shipping only, exactly one KRW.
+  assert.equal(shippingOnly.outcomes[0].basePriceChanged, false);
+  assert.equal(shippingOnly.outcomes[0].eventType, "PRICE_CHANGE");
   await save("103", 201, 3, 3000); // Equal total, different item AND shipping.
   await save("103", 201, 4, 3000);
   assert.equal((await events("internal-c")).length, 3);
@@ -186,7 +217,9 @@ try {
   );
   assert.equal((await events("internal-c"))[1].event_type, "PRICE_CHANGE");
   assert.equal(Number((await events("internal-c"))[2].observation_count), 2);
-  await save("103", 201, 5, null);
+  const shippingUnknown = await save("103", 201, 5, null);
+  assert.equal(shippingUnknown.outcomes[0].basePriceChanged, false);
+  assert.equal(shippingUnknown.outcomes[0].shippingKnowledgeChanged, true);
   assert.equal(
     (await events("internal-c"))[3].event_type,
     "OBSERVATION_BASELINE"
@@ -505,6 +538,145 @@ try {
   );
   console.log(
     "PASS: 12 current-price warnings, duplicate-only rerun exits 0, raw/current/observed prices unchanged"
+  );
+
+  // Exercise the new fallback with real repository SQL and isolated data.
+  const historyBeforeFallback = await rows(
+    "SELECT * FROM price_histories ORDER BY id"
+  );
+  const failedBefore = (
+    await rows(
+      "SELECT current_price,current_price_checked_at FROM products WHERE id='internal-c'"
+    )
+  )[0];
+  const trackedForFallback = await live.findTrackedProducts();
+  const listPrices = new Map(
+    trackedForFallback
+      .filter(p => !["102", "103"].includes(p.external_product_id))
+      .map(p => [p.external_product_id, 500])
+  );
+  const fallbackResult = await refreshTrackedLivePriceSnapshot(
+    async () => ({ prices: listPrices, checkedAt: at(20) }),
+    async targets => {
+      assert.deepEqual(targets.map(p => p.external_product_id).sort(), [
+        "102",
+        "103",
+      ]);
+      return {
+        prices: new Map([["102", 654]]),
+        checkedAt: at(21),
+        failures: new Map([["103", "PRODUCT_ID_NOT_FOUND"]]),
+      };
+    },
+    live,
+    logger
+  );
+  assert.equal(fallbackResult.retryTargets, 2);
+  assert.equal(fallbackResult.retryObserved, 1);
+  assert.equal(fallbackResult.failed, 1);
+  assert.equal(fallbackResult.recordedFailureCandidates, 1);
+  assert.equal(
+    (await rows("SELECT current_price FROM products WHERE id='internal-b'"))[0]
+      .current_price,
+    654
+  );
+  assert.deepEqual(
+    (
+      await rows(
+        "SELECT current_price,current_price_checked_at FROM products WHERE id='internal-c'"
+      )
+    )[0],
+    failedBefore
+  );
+  assert.deepEqual(
+    await rows("SELECT * FROM price_histories ORDER BY id"),
+    historyBeforeFallback
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT reason FROM price_collection_status WHERE product_id='internal-c' AND stream='CURRENT' AND checked_at=$1",
+        [at(21)]
+      )
+    )[0].reason,
+    "PRODUCT_ID_NOT_FOUND"
+  );
+  console.log(
+    "PASS: tracked fallback saves exact matches, preserves missing prices and monthly history"
+  );
+  assert.equal(fallbackResult.executionStatus, "PARTIAL_SUCCESS");
+
+  // A later product's SQL failure must leave the earlier product committed.
+  const failSecond = new PgLivePriceSnapshotRepository({
+    query,
+    connect: async () => ({
+      release() {},
+      query: async (sql: string, params?: unknown[]) => {
+        if (sql.includes("UPDATE products SET") && params?.[0] === "internal-b")
+          throw new Error("injected second product failure");
+        return query(sql, params);
+      },
+    }),
+  } as unknown as Pool);
+  const selectedProducts = trackedForFallback.filter(p =>
+    ["101", "102"].includes(p.external_product_id)
+  );
+  const bBeforeFailure = (
+    await rows(
+      "SELECT current_price,current_price_checked_at FROM products WHERE id='internal-b'"
+    )
+  )[0];
+  const logFailure = {
+    info() {},
+    warn() {},
+    error: (...args: unknown[]) => {
+      failureLog = args;
+    },
+  };
+  let failureLog: unknown[] = [];
+  await assert.rejects(
+    () =>
+      refreshTrackedLivePriceSnapshot(
+        async () => ({
+          prices: new Map([
+            ["101", 777],
+            ["102", 888],
+          ]),
+          checkedAt: at(22),
+        }),
+        async () => {
+          throw new Error("unexpected fallback");
+        },
+        failSecond,
+        logFailure,
+        selectedProducts
+      ),
+    (error: any) =>
+      error.failureType === "STORAGE_ERROR" &&
+      error.stage === "UPDATE_CURRENT_PRICE" &&
+      error.productId === "internal-b" &&
+      error.committedOutcomes.some((o: any) => o.productId === "internal-a")
+  );
+  assert.equal(
+    (await rows("SELECT current_price FROM products WHERE id='internal-a'"))[0]
+      .current_price,
+    777
+  );
+  assert.deepEqual(
+    (
+      await rows(
+        "SELECT current_price,current_price_checked_at FROM products WHERE id='internal-b'"
+      )
+    )[0],
+    bBeforeFailure
+  );
+  assert.equal((failureLog[1] as any).executionStatus, "FAILED");
+  assert.deepEqual(
+    await rows("SELECT * FROM price_histories ORDER BY id"),
+    historyBeforeFallback
+  );
+  console.log(
+    "PASS: SQL failure reports failed product and retains earlier committed price"
   );
 } finally {
   await db.close();

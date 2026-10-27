@@ -73,4 +73,21 @@ describe("parseDanawaProductList", () => {
       product,
     ]);
   });
+  it("accepts an explicit empty result only for a selected search", () => {
+    const empty = '<input id="totalProductCount" value="0" />';
+    expect(() => parseDanawaProductList(empty, 1, 100)).toThrow();
+    expect(parseDanawaProductList(empty, 1, 100, true).products).toEqual([]);
+    expect(() =>
+      parseDanawaProductList("<html></html>", 1, 100, true)
+    ).toThrow();
+  });
+  it("reports rejected entries without assigning unknown IDs to tracked products", () => {
+    const html = FIXTURE.replace(
+      "</ul>",
+      '<li class="prod_item" id="productItem123"></li><li class="prod_item"></li></ul>'
+    );
+    const result = parseDanawaProductList(html, 1, 100);
+    expect(result.rejectedItems).toBe(2);
+    expect(result.rejectedExternalIds).toEqual(["123"]);
+  });
 });
