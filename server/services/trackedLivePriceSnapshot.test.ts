@@ -327,6 +327,10 @@ describe("tracked live price refresh", () => {
         completed: true,
       })
     );
+    expect(logger.info).toHaveBeenCalledWith(
+      "Live price refresh stage started",
+      { stage: "listSave" }
+    );
     expect(repository.recordUnobserved).toHaveBeenCalledWith(
       [],
       at,

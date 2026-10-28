@@ -106,6 +106,11 @@ export async function refreshTrackedLivePriceSnapshot(
     const start = performance.now();
     let completed = false;
     try {
+      logger.info("Live price refresh stage started", { stage: name });
+    } catch {
+      // A diagnostic log must not prevent the collection stage from running.
+    }
+    try {
       const result = await action();
       completed = true;
       return result;
@@ -209,7 +214,8 @@ export async function refreshTrackedLivePriceSnapshot(
         live.prices,
         live.checkedAt,
         live.details,
-        expectedMappings
+        expectedMappings,
+        { logger, batch: "listSave" }
       )
     );
     completedOutcomes = listApplied.outcomes;
@@ -257,7 +263,8 @@ export async function refreshTrackedLivePriceSnapshot(
             retryPrices,
             selected.checkedAt,
             live.details,
-            expectedMappings
+            expectedMappings,
+            { logger, batch: "selectedSave" }
           )
         )
       : { updated: 0, outcomes: [], skipped: [] };
